@@ -1,81 +1,86 @@
 # Nightsail
 
-Open water at night, a column of light standing on it, and a small boat going past. The sea, the sky,
-the hull, the sail and the specks drifting in the air are all generated from code at start-up, and
-every number that shapes them is on a slider.
+A bubble of points hangs in the dark. Scroll, and it flies off into the distance, unwinds into threads
+and settles as the core of a column of light. Around it a night sea assembles, with a small boat right
+under the light and a figure on deck looking up. Scroll back and it all comes apart again.
+
+Every number that shapes the scene is on a panel, and a look you like can be sent as a link.
 
 **Live demo:** https://kloserock97-tech.github.io/nightsail/
 
-![Night preset](docs/shot-night.jpg)
+![The sea](docs/shot-sea.jpg)
+
+| First screen | On the way | Storm | Ember |
+| --- | --- | --- | --- |
+| ![bubble](docs/shot-bubble.jpg) | ![flight](docs/shot-flight.jpg) | ![storm](docs/shot-storm.jpg) | ![ember](docs/shot-ember.jpg) |
 
 ## The idea
 
-The scene is built around one rule: the boat has to ride the water the shader draws, not a
-simplified copy of it. Most "boat on waves" demos bob the boat on a sine wave that has nothing to do
-with the surface underneath, and it shows the moment the swell gets bigger. Here the wave train is
-data — six vectors uploaded to the GPU — and the exact same sum is evaluated once more on the CPU at
-the boat's position. The boat takes its height and its tilt from that result, so when the sea turns
-rough it heels over on the actual crest it is sitting on.
+There is exactly one light in this scene and it stands at a known point. So almost nothing is lit by a
+lighting system: the sea, the shards and the air each brighten by how much they face the core and how
+close they are to its axis. That is what keeps a frame this busy at a high frame rate, and it is also
+what makes the light feel like the only thing in the world.
 
-## The water
+## The bubble
 
-A sum of six Gerstner waves. Unlike sines, Gerstner waves move points sideways as well as up and down,
-which is what gives a swell a sharp crest and a long flat trough. The train is derived from a single
-wind direction: each wave is shorter, slower and lower than the one before it, and they fan out
-around the wind so the ridges never line up into corridors. Wave speed follows deep-water dispersion
-(long waves travel faster), which quietly does a lot of the work of making it read as water.
+A quarter of a million points in a curl-noise field, recomputed every frame on the GPU in a compute pass.
+Nothing is integrated or stored: a point's position is a pure function of its seed and time, so the cloud
+never drifts apart and freezing time freezes it exactly.
 
-Shading is written by hand and deliberately cheap. There is no reflection pass and no environment map:
+The shape comes from three steps. The direction of the field at the seed, normalised, lands the point on a
+sphere, which is the only reason the cloud is round. From there it follows the field for a few shrinking
+strides, so neighbours walk the same path and draw threads. A slow noise then pushes patches in and out of
+the shell, unclamped, so the outline tears. On the flight a single `dissolve` value lengthens the strides
+and the bubble unwinds.
 
-- deep and crest colours mixed by how far up the wave a point is,
-- a fresnel rim that turns grazing water into sky,
-- a tilt term, because a sloped face reflects higher up the sky than a flat one,
-- the light column as a light: a radial spill around its base and a glint path that follows the viewer,
-- foam where crests get steep, broken up by two octaves of value noise,
-- squared-exponential haze, so the water near the boat stays water and the horizon melts into the sky.
+The lens is fake: a point's blur disc grows with its distance from the plane of focus, and its light is
+spread over that disc. Points in focus are hard grains, the rest are faint wide circles. Distances are in
+radii of the cloud, so the look holds while the bubble grows fivefold.
+
+Without WebGPU the same function runs in the vertex stage on 20,000 points.
 
 ## The light
 
-Three additive pieces and no lights of their own: an open cylinder for the shaft, a billboard for the
-bloom, a hot spot at the waterline. The shaft is brightest at its silhouette and faintest in the
-middle, the way a glass tube is, because at the edges you look through more of it. It starts a few
-units under the surface so it reads as light standing in the water, not a tube hanging over it. A
-slow two-frequency pulse keeps it from looking like a still image.
+- **Column.** A single plane turned to the camera, with a gaussian falloff across it, a pinch at the core
+  and a noise texture along it. A plane has no silhouette, which a cone or a cylinder always does. Where it
+  cuts through the boat it fades by comparing its depth with the scene's, so there is no seam.
+- **Core.** 5,400 sparks sampled on an icosphere, each breaking away along its normal and carried by a CPU
+  curl field, so the core boils instead of glowing.
+- **Threads.** 520 short paths traced through the field once at start-up and baked into ribbons; a bright
+  head runs along each. The field does not change, so there is no reason to trace it every frame.
+- **Dust and shards.** Sparse sparks settling towards the column and 150 dented rocks drifting up, for
+  parallax.
+- **Lens.** Bloom, a band blur that softens the top and bottom of the frame, and lens flares drawn from the
+  projected position of the core rather than extracted from bright pixels.
 
-## The boat
+## The sea
 
-There is no model file. The hull is drawn the way a shipwright draws one: stations along the length,
-each with a half-width and a depth, a fine bow, a full middle and a cut-off stern, and a sheer line
-that lifts towards both ends. The surface is stitched between neighbouring stations with flat
-normals. Length, beam, draft, sheer, mast and sail are all sliders, so the same code makes a dinghy
-or a long low skiff. A lantern on the stern is the only warm thing in the frame.
+Four directional sines with sharpened crests, plus three ripples that bend the normal but never move the
+surface. The swell is written once in the shader and once in JavaScript, and the boat takes its height and
+tilt from the JavaScript copy, so it rides the crest it is actually on. The water reflects the same
+panorama that sits behind it, with Schlick fresnel, light through thin crests, a glint path on the half
+vector, foam on steep slopes and mist that stays in the troughs.
+
+The sky is an HDR panorama rendered once in Blender Cycles: a light column inside height-falling haze.
 
 ## Controls
 
+Scroll or swipe to travel, `↓` `↑` step through it, `H` hides the interface, `Space` freezes time, `R`
+replays the bubble.
+
 | Folder | What's in it |
 | --- | --- |
-| **Sea** | swell height, wavelength, steepness, speed, wind direction and spread, water colours, foam, glossiness, sky reflection |
-| **Sky and air** | zenith and horizon colours, stars, haze, drifting motes (count, size, drift, colour) |
-| **The light** | colour, height, radius, intensity, spill on the water, how far the spill reaches, pulse |
-| **Boat** | speed, distance from the light, hull shape, mast, sail, colours, lantern |
-| **View** | exposure, auto orbit, freeze time |
+| **Journey** | scroll progress, wheel step, smoothing, time scale |
+| **Bubble** | field frequency, speed, spray, f-stop, grain, brightness, framing on the first screen |
+| **Light, Column, Halo** | colour of the light, shape and falloff of the column, halo |
+| **Core sparks, Threads, Dust, Shards** | everything that moves around the core |
+| **Sea** | swell, colours, reflection, ripples, light through crests, foam, glint, mist |
+| **Air** | sky gradient, panorama brightness, fog, glow around the column, mist |
+| **Lens** | bloom, flare strength and spread, band blur |
+| **Camera** | drift, how far the figure looks up |
 
-`H` hides the panel, `Space` freezes time, drag to orbit, scroll to zoom.
-
-Presets: night, dawn, storm, beacon, ice. **Copy link to this night** writes the whole setup into the
-address bar, so a version you like can be sent as a plain URL.
-
-| storm | beacon | dawn |
-| --- | --- | --- |
-| ![storm](docs/shot-storm.jpg) | ![beacon](docs/shot-beacon.jpg) | ![dawn](docs/shot-dawn.jpg) |
-
-## Performance
-
-About a dozen draw calls, and one of them does the real work: the water, a 320×320 grid of about
-100k vertices, six waves per vertex. The fragment work on it is a handful of arithmetic and two
-value-noise lookups. On an Intel Arc integrated GPU the default night runs at over 150 fps at
-1368×775. If a machine struggles, **swell height** costs nothing while **motes** do, and the water
-grid size is one number in `src/ocean.js`.
+Presets: night, storm, calm, ember, ghost. **Copy link to this look** puts every changed value into the
+address; add `#sea=1` to open straight at the sea and `#webgl=1` to force the WebGL2 path.
 
 ## Running it
 
@@ -92,24 +97,36 @@ npm run preview
 
 | File | What it is |
 | --- | --- |
-| `src/waves.js` | the wave train, once as data, once as GLSL, once as a JS sampler |
-| `src/ocean.js` | water mesh and shading |
-| `src/sky.js` | gradient dome, glow around the light, stars |
-| `src/pillar.js` | the light column |
-| `src/boat.js` | hull generator, mast, sail, lantern |
-| `src/motes.js` | drifting points in a wrapping box around the camera |
-| `src/settings.js` | defaults, presets, URL encoding |
-| `src/main.js` | scene, panel, loop |
+| `src/main.js` | renderer, scene, the scroll journey, camera |
+| `src/bubble.js` | the point cloud: field, fake lens, compute and fallback paths |
+| `src/light.js` | column and halo |
+| `src/sparks.js` | core sparks and dust |
+| `src/flow.js` | baked threads around the core |
+| `src/curl.js` | the CPU curl field |
+| `src/debris.js` | drifting shards |
+| `src/ocean.js` | the sea, in the shader and on the CPU |
+| `src/sky.js` | panorama loading and a small RGBE reader |
+| `src/boat.js` | hull generator, wheelhouse, the figure |
+| `src/post.js` | bloom, band blur, lens flares |
+| `src/panel.js` | panel rows, presets, address encoding |
 
-## Prior art
+## Performance
 
-A lit column on a night sea is a composition you will have seen before in motion design; the scene
-here, the wave model, the shading, the hull generator and the panel are my own work, written from
-scratch. Built with [three.js](https://threejs.org) and [lil-gui](https://lil-gui.georgealways.com).
+On an Intel Arc integrated GPU at 1368×775 it runs at about 70 fps on the sea and 40 fps on the first
+screen, where the quarter-million-point compute pass is the whole cost. The WebGL2 path runs at around
+75 fps with fewer points.
+
+## Credits
+
+Scene, shaders, field, hull and panel are my own work. Built with [three.js](https://threejs.org) (MIT)
+and [lil-gui](https://lil-gui.georgealways.com) (MIT). The figure is "Hoodie Character" by
+[Quaternius](https://quaternius.com), released under CC0. The sky was rendered for this project. Titles
+are set in Geologica and Onest (SIL Open Font License), loaded from Google Fonts. Details in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
 
 Nikita Gorbachev · kloserock97@gmail.com ·
 [LinkedIn](https://www.linkedin.com/in/nikita-gorbachev-productdesigner)

@@ -3,32 +3,48 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Nightsail — a sea you can tune</title>
-<meta name="description" content="Gerstner waves, a light column standing on the water and a boat riding the same swell the shader draws. No models, no textures: every number is a slider.">
-<meta name="theme-color" content="#04070f">
+<title>Nightsail — a bubble that becomes a light over the sea</title>
+<meta name="description" content="A cloud of points in a curl-noise field. Scroll, and it flies into the dark and becomes the core of a column of light over a night sea with a boat on it. Every number is on a panel.">
+<meta name="theme-color" content="#030408">
 <meta property="og:title" content="Nightsail">
-<meta property="og:description" content="Open water, a light standing on it and a boat going past. Every number is a slider.">
+<meta property="og:description" content="Scroll a bubble of points into a column of light over a night sea. Every number is a slider.">
 <meta property="og:type" content="website">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M3 22c3 2 5 2 8 0s5-2 8 0 5 2 8 0' fill='none' stroke='%23fff' stroke-width='2'/%3E%3Cpath d='M16 4v13' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M3 24c3 2 5 2 8 0s5-2 8 0 5 2 8 0' fill='none' stroke='%23fff' stroke-width='2'/%3E%3Ccircle cx='16' cy='9' r='4' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:slnt,wght@-12..0,300&family=Onest:wght@500&display=swap">
 <link rel="stylesheet" href="./src/style.css">
 </head>
 <body>
 <canvas id="stage"></canvas>
 
-<header class="hud">
-  <h1>Nightsail</h1>
-  <p>Open water, a light standing on it, and a boat going past. The sea is a sum of Gerstner waves,
-     and the boat reads its height and its tilt from the same sum the shader draws, so it rides the
-     swell instead of hovering near it.</p>
-  <p class="hint"><kbd>H</kbd> hide the panel · <kbd>Space</kbd> freeze time · drag to orbit · scroll to zoom</p>
+<!-- Film layer over the render: vignette, grain and a few registration marks -->
+<div class="film" aria-hidden="true">
+  <div class="vignette"></div>
+  <div class="grain"></div>
+  <div class="marks"><i style="left:18%"></i><i style="left:34%"></i><i style="left:50%"></i><i style="left:66%"></i><i style="left:82%"></i></div>
+  <div class="ticks"><span></span><span></span><span></span></div>
+</div>
+
+<header class="brand">
+  <a href="https://github.com/kloserock97-tech/nightsail" target="_blank" rel="noopener">Nightsail · source</a>
 </header>
 
-<p class="credit">
-  <a href="https://github.com/kloserock97-tech/nightsail" target="_blank" rel="noopener">Source on GitHub</a>
-</p>
+<section class="title-hero">
+  <h1>Nightsail</h1>
+  <p class="scroll-hint">Scroll down</p>
+</section>
+
+<section class="title-sea" aria-hidden="true">
+  <h2 class="left">A night sea,<br>a boat<br><em>and one</em><br><em>light</em></h2>
+  <h2 class="right"><em>Every number</em><br><em>is a slider</em></h2>
+</section>
+
+<p class="stats" aria-live="off"></p>
+<p class="toast" role="status"></p>
 
 <div class="fallback" id="fallback" hidden>
-  <p>This browser can't start WebGL2, so there is no water to sail.</p>
+  <p>This browser can start neither WebGPU nor WebGL2, so there is no sea to show.</p>
 </div>
 
 <script type="module" src="./src/main.js"></script>

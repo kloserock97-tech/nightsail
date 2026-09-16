@@ -1,56 +1,49 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-/* The boat, built by hand out of numbers.
+/* The boat and the figure standing in it.
  *
- * There is no model file anywhere in this project, which keeps it honest: nothing to license, nothing
- * to download, and the hull can be reshaped from a slider. The shape is generated the way a real one
- * is drawn — as stations along the length, each with a half-width and a depth — and then the surface
- * is stitched between neighbouring stations.
+ * The hull is built from numbers, the way a real one is drawn: stations along the length, each with a
+ * half width and a depth, stitched into a surface. Flat normals on purpose: at this distance and against
+ * a light this strong the boat is a silhouette with a few catching planes. A wheelhouse, a mast and a
+ * dim lantern make it a working boat rather than a bathtub.
  *
- * Every vertex is duplicated per triangle so the normals stay flat. Faceted is the point: at this
- * size and against a light that strong, the boat is mostly a silhouette with a few catching planes. */
+ * The figure is "Hoodie Character" by Quaternius (CC0), trimmed to one idle clip. Its head is tipped up
+ * towards the light on top of the animation every frame. */
 
 const STATIONS = 14;
 const RINGS = 3;
 
 function hullGeometry({ length, beam, draft, sheer })
 {
-    const positions = [];
     const rows = [];
 
     for(let s = 0; s <= STATIONS; s++)
     {
-        const t = s / STATIONS;
+        const t = s / STATIONS; // 0 at the stern, 1 at the bow
 
-        /* Fine at the bow, full amidships, cut off square at the stern. */
-        const fullness = Math.pow(Math.sin(Math.PI * Math.min(t * 1.06, 1)), 0.62);
-        const halfWidth = (beam / 2) * fullness * (t > 0.93 ? 0.82 : 1);
-        const depth = draft * Math.pow(Math.sin(Math.PI * Math.min(t * 1.02, 1)), 0.5);
+        /* Full at the stern and amidships, fine at the bow. */
+        const fullness = Math.pow(Math.sin(Math.PI * Math.min(0.5 + t * 0.52, 1)), 0.55);
+        const halfWidth = (beam / 2) * fullness * (t < 0.04 ? 0.86 : 1);
+        const depth = draft * Math.pow(Math.sin(Math.PI * Math.min(0.5 + t * 0.51, 1)), 0.45);
 
-        /* Sheer: the deck line lifts towards bow and stern. It is the single line that stops a boat
-           from looking like a bathtub. */
-        const rise = sheer * (Math.pow(Math.abs(t - 0.45) * 2.1, 2) * 0.9);
-        const x = (t - 0.5) * length;
+        /* The deck line lifts towards the bow. One line, and the boat stops looking like a tub. */
+        const rise = sheer * Math.pow(Math.max(t - 0.35, 0) / 0.65, 2);
+        const z = (t - 0.5) * length;
 
         const row = [];
 
         for(let r = 0; r <= RINGS; r++)
         {
             const k = r / RINGS;
-            /* From the keel out to the deck edge: the section starts as a V and rounds off at the top. */
-            const width = halfWidth * Math.pow(k, 0.72);
-            const y = -depth * (1 - k) + rise * k;
-
-            row.push(new THREE.Vector3(x, y, width));
+            row.push(new THREE.Vector3(halfWidth * Math.pow(k, 0.7), -depth * (1 - k) + rise * k, z));
         }
 
         rows.push(row);
     }
 
-    const push = (a, b, c) =>
-    {
-        positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
-    };
+    const positions = [];
+    const push = (...points) => { for(const p of points) positions.push(p.x, p.y, p.z); };
 
     for(let s = 0; s < STATIONS; s++)
     {
@@ -58,39 +51,26 @@ function hullGeometry({ length, beam, draft, sheer })
         {
             for(const side of [1, -1])
             {
-                const p00 = rows[s][r].clone();
-                const p10 = rows[s + 1][r].clone();
-                const p01 = rows[s][r + 1].clone();
-                const p11 = rows[s + 1][r + 1].clone();
+                const [p00, p10, p01, p11] = [rows[s][r], rows[s + 1][r], rows[s][r + 1], rows[s + 1][r + 1]]
+                    .map((p) => p.clone().setX(p.x * side));
 
-                for(const p of [p00, p10, p01, p11]) p.z *= side;
-
-                if(side > 0)
-                {
-                    push(p00, p10, p11);
-                    push(p00, p11, p01);
-                }
-                else
-                {
-                    push(p00, p11, p10);
-                    push(p00, p01, p11);
-                }
+                if(side > 0) push(p00, p11, p10, p00, p01, p11);
+                else push(p00, p10, p11, p00, p11, p01);
             }
         }
+
+        const a = rows[s][RINGS], b = rows[s + 1][RINGS];
+        const c = a.clone().setX(-a.x), d = b.clone().setX(-b.x);
+        push(a, b, d, a, d, c);
     }
 
-    /* Deck: a strip between the two deck edges, so the boat is not an open shell from above. */
-    for(let s = 0; s < STATIONS; s++)
+    /* Transom: close the square stern. */
+    const stern = rows[0];
+    for(let r = 0; r < RINGS; r++)
     {
-        const a = rows[s][RINGS].clone();
-        const b = rows[s + 1][RINGS].clone();
-        const c = a.clone();
-        const d = b.clone();
-        c.z *= -1;
-        d.z *= -1;
-
-        push(a, b, d);
-        push(a, d, c);
+        const p0 = stern[r], p1 = stern[r + 1];
+        const m0 = p0.clone().setX(-p0.x), m1 = p1.clone().setX(-p1.x);
+        push(p0, m0, m1, p0, m1, p1);
     }
 
     const geometry = new THREE.BufferGeometry();
@@ -100,108 +80,87 @@ function hullGeometry({ length, beam, draft, sheer })
     return geometry;
 }
 
-export function createBoat(settings)
+export function createBoat({ figureUrl })
 {
-    const group = new THREE.Group();
-    const hullMaterial = new THREE.MeshStandardMaterial({ color: settings.hullColor, roughness: 0.85, metalness: 0, flatShading: true });
-    const trimMaterial = new THREE.MeshStandardMaterial({ color: settings.trimColor, roughness: 0.6, flatShading: true });
+    const shape = { length: 8.4, beam: 3.1, draft: 1.5, sheer: 0.7 };
+    const deck = 0.25;
 
-    let hull = new THREE.Mesh(hullGeometry(settings), hullMaterial);
+    const group = new THREE.Group();
+    group.rotation.order = "YXZ"; // heading first, then pitch and roll
+
+    const hullMaterial = new THREE.MeshStandardMaterial({ color: "#1a1c1f", roughness: 0.9, flatShading: true, side: THREE.DoubleSide });
+    const trimMaterial = new THREE.MeshStandardMaterial({ color: "#2b2d30", roughness: 0.75, flatShading: true });
+    const glassMaterial = new THREE.MeshStandardMaterial({ color: "#0c0e10", roughness: 0.3, metalness: 0.2 });
+
+    const hull = new THREE.Mesh(hullGeometry(shape), hullMaterial);
     group.add(hull);
 
-    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 1, 6), trimMaterial);
-    const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1, 5), trimMaterial);
-    boom.rotation.z = Math.PI / 2;
+    /* Wheelhouse towards the stern, with a dark band of windows and a flat roof. */
+    const house = new THREE.Mesh(new THREE.BoxGeometry(1.9, 1.7, 2.1), trimMaterial);
+    house.position.set(0, deck + 0.85, -1.4);
+    const windows = new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.42, 1.2), glassMaterial);
+    windows.position.set(0, deck + 1.25, -0.95);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 2.5), trimMaterial);
+    roof.position.set(0, deck + 1.76, -1.4);
 
-    /* The sail is a single triangle with a bit of belly, which is enough at this distance and keeps
-       the silhouette readable against the light. */
-    const sailShape = new THREE.Shape();
-    sailShape.moveTo(0, 0);
-    sailShape.lineTo(0, 1);
-    sailShape.quadraticCurveTo(-0.62, 0.42, -0.72, 0);
-    sailShape.lineTo(0, 0);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 4.6, 6), trimMaterial);
+    mast.position.set(0, deck + 1.8 + 2.3, -1.1);
+    const yard = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.8, 5), trimMaterial);
+    yard.rotation.z = Math.PI / 2;
+    yard.position.set(0, deck + 5.2, -1.1);
 
-    const sail = new THREE.Mesh(
-        new THREE.ShapeGeometry(sailShape, 12),
-        new THREE.MeshStandardMaterial({ color: settings.sailColor, roughness: 0.95, side: THREE.DoubleSide, flatShading: false }),
-    );
+    /* A lantern on the mast: barely warm, the only thing in the frame that is not the column's colour. */
+    const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), new THREE.MeshBasicMaterial({ color: "#ffc98a" }));
+    lantern.position.set(0, deck + 3.4, -0.98);
 
-    /* A lantern on the stern: a tiny additive sphere plus a card of glow, the only warm thing in the
-       frame. It is what tells you the boat is crewed. */
-    const lantern = new THREE.Mesh(
-        new THREE.SphereGeometry(0.06, 10, 8),
-        new THREE.MeshBasicMaterial({ color: settings.lanternColor }),
-    );
+    group.add(house, windows, roof, mast, yard, lantern);
 
-    const lanternGlow = new THREE.Sprite(new THREE.SpriteMaterial({
-        color: settings.lanternColor,
-        transparent: true,
-        opacity: 0.55,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        map: glowTexture(),
-    }));
+    const boat = { group, draft: shape.draft, figure: null, head: null, mixer: null, headTilt: 0.34 };
 
-    group.add(mast, boom, sail, lantern, lanternGlow);
-
-    function layout()
+    new GLTFLoader().load(figureUrl, (gltf) =>
     {
-        const { length, mastHeight, sailSize } = settings;
+        const figure = gltf.scene;
 
-        mast.scale.y = mastHeight;
-        mast.position.set(length * 0.06, mastHeight / 2, 0);
+        /* Scale to 2.4 units tall with the soles at zero. */
+        const box = new THREE.Box3().setFromObject(figure);
+        const height = box.max.y - box.min.y;
+        figure.scale.setScalar(2.4 / height);
+        figure.position.set(0, deck, 1.1);
 
-        boom.scale.y = sailSize * 0.78;
-        boom.position.set(length * 0.06 - sailSize * 0.36, mastHeight * 0.17, 0);
+        figure.traverse((child) =>
+        {
+            if(child.isMesh)
+            {
+                child.frustumCulled = false;
+                child.material.color?.multiplyScalar(0.55); // under this light the figure is mostly shape
+            }
+            if(child.isBone && !boat.head && /head/i.test(child.name)) boat.head = child;
+        });
 
-        sail.scale.set(sailSize, mastHeight * 0.82, 1);
-        sail.position.set(length * 0.06, mastHeight * 0.16, 0);
-        sail.rotation.y = -Math.PI / 2;
+        boat.mixer = new THREE.AnimationMixer(figure);
+        const clip = gltf.animations[0];
+        if(clip) boat.mixer.clipAction(clip).play();
 
-        lantern.position.set(-length * 0.42, 0.24, 0);
-        lanternGlow.position.copy(lantern.position);
-        lanternGlow.scale.setScalar(settings.lanternGlow);
-    }
+        group.add(figure);
+        boat.figure = figure;
+    });
 
-    function rebuild()
+    /* Float the boat at (x, z): height and tilt come from the same wave sum the shader draws. */
+    boat.float = (ocean, x, z, yaw, delta) =>
     {
-        hull.geometry.dispose();
-        hull.geometry = hullGeometry(settings);
-        layout();
-    }
+        const height = ocean.level + ocean.heightAt(x, z) + shape.draft * 0.42;
+        const slope = ocean.slopeAt(x, z);
 
-    function setColors()
-    {
-        hullMaterial.color.set(settings.hullColor);
-        trimMaterial.color.set(settings.trimColor);
-        sail.material.color.set(settings.sailColor);
-        lantern.material.color.set(settings.lanternColor);
-        lanternGlow.material.color.set(settings.lanternColor);
-    }
+        group.position.set(x, height, z);
+        group.rotation.set(-Math.atan(slope.z) * 0.85, yaw, Math.atan(slope.x) * 0.85);
 
-    layout();
+        if(boat.mixer)
+        {
+            boat.mixer.update(delta);
+            /* The mixer rewrites the bone every frame, so the tilt is added on top and never accumulates. */
+            if(boat.head) boat.head.rotation.x -= boat.headTilt;
+        }
+    };
 
-    return { group, rebuild, layout, setColors };
-}
-
-/* A round gradient, drawn once into a small canvas: cheaper than shipping a PNG and it never 404s. */
-function glowTexture()
-{
-    const size = 128;
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = size;
-
-    const context = canvas.getContext("2d");
-    const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    gradient.addColorStop(0, "rgba(255,255,255,1)");
-    gradient.addColorStop(0.35, "rgba(255,255,255,0.35)");
-    gradient.addColorStop(1, "rgba(255,255,255,0)");
-
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, size, size);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-
-    return texture;
+    return boat;
 }

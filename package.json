@@ -1,7 +1,7 @@
 {
   "name": "nightsail",
   "version": "1.0.0",
-  "description": "Open water, a light standing on it and a boat going past. Sea, sky, hull and air are generated from code, and every number is on a slider.",
+  "description": "A bubble of points that you scroll into a column of light over a night sea. WebGPU and TSL, every number on a panel.",
   "type": "module",
   "license": "MIT",
   "author": "Nikita Gorbachev",
