@@ -1,0 +1,20 @@
+{
+  "name": "nightsail",
+  "version": "1.0.0",
+  "description": "Open water, a light standing on it and a boat going past. Sea, sky, hull and air are generated from code, and every number is on a slider.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Nikita Gorbachev",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "lil-gui": "^0.21.0",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "vite": "^8.3.0"
+  }
+}
