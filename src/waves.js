@@ -1,19 +1,24 @@
 /* The sea, defined once and used twice.
  *
- * The surface is a sum of Gerstner waves: points do not just move up and down, they also move
- * backwards along the direction of travel, which is what gives a swell its sharp crest and its long
- * flat trough. Trochoids, not sines.
+ * The surface is a sum of trochoidal (Gerstner) waves: points do not only move up and down, they also
+ * swing back and forth along the direction of travel, which is what gives a swell its sharp crest and
+ * its long flat trough.
  *
- * The same wave set has to be evaluated in two places — the vertex shader, for the water itself, and
- * plain JavaScript, so the boat can sit on the surface rather than float near it. Keeping two copies
- * of the formula in sync by hand is a losing game, so the wave train is data: a handful of vec4s
- * uploaded as a uniform and read by both the loop below and the identical loop in the shader. */
+ * The same wave train has to be evaluated in two places — the vertex shader, for the water, and plain
+ * JavaScript, so the boat sits on the surface rather than near it. Keeping two copies of a formula in
+ * sync by hand is a losing game, so the train is data: a few vec4s uploaded as uniforms and read by
+ * the shader loop and by the identical loop in sampleSurface() below. */
 
 import * as THREE from "three";
 
 export const WAVE_COUNT = 6;
+const GRAVITY = 9.81;
 
-/** Wave train derived from the wind: each step is shorter, slower and smaller than the one before. */
+/* A fixed scatter of starting phases, so the waves never all peak at the origin at time zero. It is
+   deterministic on purpose: the same settings always give the same sea. */
+const PHASES = [0.0, 2.39, 4.71, 1.13, 5.52, 3.34];
+
+/** Wave train derived from the wind: each step is shorter, slower and lower than the one before. */
 export function buildWaves({ wind, wavelength, amplitude, steepness, spread, speed })
 {
     const waves = [];
@@ -22,18 +27,22 @@ export function buildWaves({ wind, wavelength, amplitude, steepness, spread, spe
 
     for(let i = 0; i < WAVE_COUNT; i++)
     {
-        /* Directions fan out around the wind, alternating sides, so the swell never looks like a
-           single corridor of parallel ridges. */
-        const angle = wind + ((i % 2 === 0 ? 1 : -1) * spread * (i + 1)) / WAVE_COUNT;
+        /* Directions fan out around the wind, alternating sides, so the swell never lines up into
+           corridors of parallel ridges. */
+        const side = i % 2 === 0 ? 1 : -1;
+        const angle = wind + (side * spread * (i + 1)) / WAVE_COUNT;
+        const number = (Math.PI * 2) / length;
 
         waves.push({
             direction: new THREE.Vector2(Math.cos(angle), Math.sin(angle)),
-            length,
+            number,
             height,
-            /* Deep water dispersion: long waves travel faster. Keeping this honest is most of the
-               reason the sea reads as water and not as a wobbling sheet. */
-            speed: speed * Math.sqrt(length / wavelength),
-            steepness: steepness / WAVE_COUNT,
+            /* Deep-water dispersion: angular frequency is sqrt(g·k), so long waves outrun short ones. */
+            omega: Math.sqrt(GRAVITY * number) * speed,
+            /* How far crests lean over, as a share of the most the wave can take before it loops.
+               Split across the train so the sum never folds the surface over itself. */
+            choppy: Math.min(steepness, 1.6) / (number * Math.max(height, 1e-4) * WAVE_COUNT),
+            phase: PHASES[i],
         });
 
         length *= 0.62;
@@ -43,7 +52,7 @@ export function buildWaves({ wind, wavelength, amplitude, steepness, spread, spe
     return waves;
 }
 
-/** Packed for the shader: xy direction, z wavelength, w amplitude — plus a second vec4 for the rest. */
+/** Packed for the shader: xy direction, z wavenumber, w height; then omega, choppiness, phase. */
 export function packWaves(waves)
 {
     const a = [];
@@ -51,100 +60,109 @@ export function packWaves(waves)
 
     for(const wave of waves)
     {
-        a.push(new THREE.Vector4(wave.direction.x, wave.direction.y, wave.length, wave.height));
-        b.push(new THREE.Vector4(wave.speed, wave.steepness, 0, 0));
+        a.push(new THREE.Vector4(wave.direction.x, wave.direction.y, wave.number, wave.height));
+        b.push(new THREE.Vector4(wave.omega, wave.choppy, wave.phase, 0));
     }
 
     return { a, b };
 }
 
-/** Surface point and normal at a world xz, on the CPU. Mirrors `waveGlsl` line for line. */
+/**
+ * Surface position and normal at a world xz, on the CPU. Mirrors the GLSL below term for term.
+ *
+ * The normal comes from the two tangent vectors of the displaced surface — its partial derivatives
+ * along x and along z — crossed together.
+ */
 export function sampleSurface(waves, x, z, time)
 {
-    let px = 0;
-    let py = 0;
-    let pz = 0;
-    let nx = 0;
-    let ny = 1;
-    let nz = 0;
+    let ox = 0, oy = 0, oz = 0;
+    let txx = 1, txy = 0, txz = 0;   // tangent along x
+    let tzx = 0, tzy = 0, tzz = 1;   // tangent along z
 
-    for(const wave of waves)
+    for(const w of waves)
     {
-        const k = (Math.PI * 2) / wave.length;
-        const c = Math.sqrt(9.81 / k) * wave.speed;
-        const d = wave.direction;
-        const f = k * (d.x * x + d.y * z - c * time);
-        const a = wave.steepness / k;
+        const dx = w.direction.x;
+        const dz = w.direction.y;
+        const theta = w.number * (dx * x + dz * z) - w.omega * time + w.phase;
+        const s = Math.sin(theta);
+        const c = Math.cos(theta);
+        const swing = w.choppy * w.height;
+        const slope = w.number * w.height;
+        const lean = w.number * swing;
 
-        px += d.x * (a * Math.cos(f));
-        pz += d.y * (a * Math.cos(f));
-        py += wave.height * Math.sin(f);
+        ox += dx * swing * c;
+        oz += dz * swing * c;
+        oy += w.height * s;
 
-        const wa = k * wave.height;
-        const s = Math.sin(f);
-        const cs = Math.cos(f);
+        txx -= lean * dx * dx * s;
+        txy += slope * dx * c;
+        txz -= lean * dx * dz * s;
 
-        nx -= d.x * wa * cs;
-        nz -= d.y * wa * cs;
-        ny -= wave.steepness * s;
+        tzx -= lean * dx * dz * s;
+        tzy += slope * dz * c;
+        tzz -= lean * dz * dz * s;
     }
 
+    /* normal = tangentZ × tangentX */
+    let nx = tzy * txz - tzz * txy;
+    let ny = tzz * txx - tzx * txz;
+    let nz = tzx * txy - tzy * txx;
     const length = Math.hypot(nx, ny, nz) || 1;
 
-    return { x: x + px, y: py, z: z + pz, nx: nx / length, ny: ny / length, nz: nz / length };
+    return { x: x + ox, y: oy, z: z + oz, nx: nx / length, ny: ny / length, nz: nz / length };
 }
 
-/* The shader half. Included by the ocean material and by anything else that needs to sit on the
-   water, so there is exactly one definition of what the surface is. */
+/* The shader half. Included by the ocean material, so there is exactly one definition on the GPU of
+   what the surface is, and it matches sampleSurface() above. */
 export const waveGlsl = /* glsl */ `
-uniform vec4 uWaveA[WAVE_COUNT];   // xy direction, z wavelength, w amplitude
-uniform vec4 uWaveB[WAVE_COUNT];   // x speed, y steepness
+uniform vec4 uWaveA[WAVE_COUNT];   // xy direction, z wavenumber, w height
+uniform vec4 uWaveB[WAVE_COUNT];   // x angular frequency, y choppiness, z phase
 uniform float uWaveTime;
 
 struct Surface
 {
     vec3 position;
     vec3 normal;
-    float crest;                   // 0 in the troughs, 1 on the sharpest ridges
+    float crest;                   // -1 deep in a trough, 1 on the top of a ridge
 };
 
 Surface sampleSurface(vec3 base)
 {
     vec3 offset = vec3(0.0);
-    vec3 normal = vec3(0.0, 1.0, 0.0);
+    vec3 tangentX = vec3(1.0, 0.0, 0.0);
+    vec3 tangentZ = vec3(0.0, 0.0, 1.0);
     float crest = 0.0;
-    float weight = 0.0;
+    float total = 0.0;
 
     for(int i = 0; i < WAVE_COUNT; i++)
     {
-        vec2 direction = uWaveA[i].xy;
-        float wavelength = uWaveA[i].z;
-        float amplitude = uWaveA[i].w;
-        float speed = uWaveB[i].x;
-        float steepness = uWaveB[i].y;
+        vec2 d = uWaveA[i].xy;
+        float number = uWaveA[i].z;
+        float height = uWaveA[i].w;
+        float omega = uWaveB[i].x;
+        float choppy = uWaveB[i].y;
+        float phase = uWaveB[i].z;
 
-        float k = 6.28318530718 / wavelength;
-        float c = sqrt(9.81 / k) * speed;
-        float f = k * (dot(direction, base.xz) - c * uWaveTime);
-        float a = steepness / k;
+        float theta = number * dot(d, base.xz) - omega * uWaveTime + phase;
+        float s = sin(theta);
+        float c = cos(theta);
+        float swing = choppy * height;
+        float slope = number * height;
+        float lean = number * swing;
 
-        offset.x += direction.x * (a * cos(f));
-        offset.z += direction.y * (a * cos(f));
-        offset.y += amplitude * sin(f);
+        offset += vec3(d.x * swing * c, height * s, d.y * swing * c);
 
-        float wa = k * amplitude;
-        normal.x -= direction.x * wa * cos(f);
-        normal.z -= direction.y * wa * cos(f);
-        normal.y -= steepness * sin(f);
+        tangentX += vec3(-lean * d.x * d.x * s, slope * d.x * c, -lean * d.x * d.y * s);
+        tangentZ += vec3(-lean * d.x * d.y * s, slope * d.y * c, -lean * d.y * d.y * s);
 
-        crest += sin(f) * amplitude;
-        weight += amplitude;
+        crest += s * height;
+        total += height;
     }
 
     Surface surface;
     surface.position = base + offset;
-    surface.normal = normalize(normal);
-    surface.crest = clamp(crest / max(weight, 0.0001), -1.0, 1.0);
+    surface.normal = normalize(cross(tangentZ, tangentX));
+    surface.crest = clamp(crest / max(total, 0.0001), -1.0, 1.0);
 
     return surface;
 }
