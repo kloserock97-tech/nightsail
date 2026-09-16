@@ -1,0 +1,4 @@
+[
+  { "what": "\"Marble Bust 01\"", "where": "public/statue/marble_bust_01.glb (packed from the 1k glTF, geometry quantized)", "source": "Rico Cilliers, Poly Haven, https://polyhaven.com/a/marble_bust_01", "license": "CC0 1.0" },
+  { "what": "Sky panorama", "where": "public/sky.hdr", "source": "rendered for this project in Blender by Nikita Gorbachev", "license": "project license" }
+]

@@ -9,11 +9,11 @@ import { createLight, CORE } from "./light.js";
 import { createSparks } from "./sparks.js";
 import { createFlow } from "./flow.js";
 import { createDebris } from "./debris.js";
-import { createBoat } from "./boat.js";
+import { createStatue } from "./statue.js";
 import { createPost } from "./post.js";
 import { buildPanel } from "./panel.js";
 
-/* Nightsail: a column of light over a night sea, with a boat right under it.
+/* Nightsail: a column of light over a night sea, and a marble head drowning under it.
  *
  * The lighting is almost entirely fake, and that is the point: there is one light source at a known spot,
  * so the sea, the shards and the air brighten by how much they face the core and how close they are to its
@@ -75,12 +75,12 @@ const ocean = createOcean({ size: SEA_SIZE, level: SEA_LEVEL, air, sky, clock, l
 const sparks = createSparks({ clock, light });
 const flow = createFlow({ clock, light });
 const debris = createDebris({ clock, air });
-const boat = createBoat({ base: BASE });
+const statue = createStatue({ url: `${BASE}statue/marble_bust_01.glb`, ocean, clock });
 
-scene.add(ocean.mesh, light.group, sparks.mesh, flow.mesh, debris.mesh, boat.group);
+scene.add(ocean.mesh, light.group, sparks.mesh, flow.mesh, debris.mesh, statue.group);
 
-/* The only real lights are for the boat and the figure: weak steel moonlight from behind the column and
-   the core itself, so the boat reads as a silhouette with a lit rim. */
+/* The only real lights are for the statue: weak steel moonlight from behind the column and the core
+   itself, which lights the head from above like a spotlight. */
 const moon = new THREE.DirectionalLight("#8a96b8", 1.4);
 moon.position.set(12, 50, 70);
 const coreLight = new THREE.PointLight("#dfe8ff", 900, 0, 2);
@@ -92,11 +92,11 @@ const post = createPost({ renderer, scene, camera });
 
 /* ── the view ─────────────────────────────────────────────────────────────── */
 
-/* A wide shot from high and far back: the whole sea, the boat and the column fit at once. */
-camera.position.set(0, 34, -110);
+/* A wide shot from high and far back: the whole sea, the head and the column fit at once. */
+camera.position.set(0, 22, -112);
 
 const controls = new OrbitControls(camera, canvas);
-controls.target.set(0, 8, 10);
+controls.target.set(0, 10, 8);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
 controls.minDistance = 12;
@@ -154,7 +154,8 @@ function frameLoop()
 
     sparks.update(camera);
     debris.update();
-    boat.float(ocean, clock.delta, clock.elapsed);
+    ocean.update(clock.elapsed);
+    statue.update(clock.delta);
     light.face(camera);
 
     probe.copy(core).project(camera);
@@ -180,7 +181,7 @@ function toast(text)
 
 const panel = buildPanel({
     gui: new GUI({ title: "Nightsail", width: 300 }),
-    clock, lens, view, tuned, air, ocean, light, sparks, flow, debris, boat, post, controls, camera, toast,
+    clock, lens, view, tuned, air, ocean, light, sparks, flow, debris, statue, post, controls, camera, toast,
 });
 
 const stats = (() =>
@@ -224,4 +225,4 @@ addEventListener("keydown", (event) =>
 renderer.setAnimationLoop(frameLoop);
 
 /* Exposed for screenshots and the curious. */
-window.nightsail = { clock, renderer, scene, camera, controls, view, boat, panel };
+window.nightsail = { clock, renderer, scene, camera, controls, view, statue, ocean, panel };

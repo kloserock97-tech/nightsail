@@ -1,9 +1,9 @@
 {
   "name": "nightsail",
   "version": "1.0.0",
-  "description": "A column of light over a night sea with a low-poly boat under it. WebGPU and TSL, every value on a panel.",
+  "description": "A giant marble head surfacing from a night sea under a column of light. WebGPU and TSL, every value on a panel.",
   "type": "module",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "author": "Nikita Gorbachev",
   "scripts": {
     "dev": "vite",

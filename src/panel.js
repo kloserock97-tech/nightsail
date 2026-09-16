@@ -1,5 +1,3 @@
-import { BOATS } from "./boat.js";
-
 /* The panel, the address bar and the presets, from one list.
  *
  * Every tunable value is one row: a path, the thing that holds it, a range. The panel is built from the
@@ -11,7 +9,7 @@ const PRESETS = {
     storm: {
         "sea.amplitude": 1.7, "sea.sharpness": 2.3, "sea.foamAmount": 0.85, "sea.glint": 1.2, "sea.mist": 0.22,
         "core.rate": 0.6, "core.flow": 4.2, "threads.amount": 0.75, "threads.speed": 0.34,
-        "dust.speed": 0.05, "dust.swirl": 1.2, "shards.drift": 4.6, "column.intensity": 0.5, "boat.tilt": 1.1,
+        "dust.speed": 0.05, "dust.swirl": 1.2, "shards.drift": 4.6, "column.intensity": 0.5, "sea.tideHeight": 2.3, "sea.tidePeriod": 11,
     },
     calm: {
         "sea.amplitude": 0.42, "sea.sharpness": 1.2, "sea.foamAmount": 0.08, "sea.ripple": 0.6, "sea.glint": 2.3, "sea.gloss": 170,
@@ -24,43 +22,44 @@ const PRESETS = {
     },
     ghost: {
         "column.intensity": 1, "halo.intensity": 0.35, "threads.amount": 1.2, "threads.spark": 1.8,
-        "core.size": 0.34, "lens.bloom": 0.5, "lens.flare": 0.2, "shards.light": 0.5, "boat.model": "ship",
+        "core.size": 0.34, "lens.bloom": 0.5, "lens.flare": 0.2, "shards.light": 0.5, "statue.brightness": 1.2,
     },
 };
 
 const LABELS = {
-    time: "Time", boat: "Boat", light: "Light", column: "Column", halo: "Halo", core: "Core sparks", threads: "Threads",
+    time: "Time", statue: "Statue", light: "Light", column: "Column", halo: "Halo", core: "Core sparks", threads: "Threads",
     dust: "Dust", shards: "Shards", sea: "Sea", air: "Sky and air", lens: "Lens", view: "View",
 };
 
 export function buildPanel(ctx)
 {
-    const { gui, clock, lens, view, tuned, air, ocean, light, sparks, flow, debris, boat, post, controls, toast } = ctx;
+    const { gui, clock, lens, view, tuned, air, ocean, light, sparks, flow, debris, statue, post, controls, toast } = ctx;
 
     const u = (uniform) => ({ get: () => uniform.value, set: (v) => { uniform.value = v; } });
     const c = (uniform) => ({ get: () => `#${uniform.value.getHexString()}`, set: (v) => { uniform.value.set(v); }, color: true });
     const o = (object, key, after) => ({ get: () => object[key], set: (v) => { object[key] = v; after?.(); } });
 
-    const b = boat.settings;
-    const refit = () => boat.fit();
+    const st = statue.settings;
+    const refit = () => statue.fit();
 
     /* folder, name, accessor, min, max, step */
     const rows = [
         ["time", "speed", o(clock, "speed"), 0, 3, 0.01],
 
-        ["boat", "model", { ...o(b, "model", () => boat.setModel(b.model)), options: Object.keys(BOATS) }],
-        ["boat", "size", o(b, "size", refit), 0.3, 3, 0.01],
-        ["boat", "sink", o(b, "sink", refit), 0, 3, 0.01],
-        ["boat", "x", o(b, "x"), -40, 40, 0.1],
-        ["boat", "z", o(b, "z"), -40, 40, 0.1],
-        ["boat", "heading", o(b, "heading"), -180, 180, 1],
-        ["boat", "tilt", o(b, "tilt"), 0, 2, 0.01],
-        ["boat", "brightness", o(b, "brightness", () => boat.applyBrightness()), 0, 1.5, 0.01],
-        ["boat", "figure", o(b, "figure", () => boat.placeFigure())],
-        ["boat", "lookUp", o(b, "headTilt"), -1.2, 1.2, 0.01],
+        ["statue", "height", o(st, "height", refit), 5, 80, 0.5],
+        ["statue", "top", o(st, "top"), -12, 20, 0.05],
+        ["statue", "x", o(st, "x"), -40, 40, 0.1],
+        ["statue", "z", o(st, "z"), -40, 40, 0.1],
+        ["statue", "turn", o(st, "turn", refit), -180, 180, 1],
+        ["statue", "lean", o(st, "lean", refit), -45, 45, 0.5],
+        ["statue", "brightness", o(st, "brightness"), 0, 3, 0.01],
+        ["statue", "wetDarken", u(statue.uniforms.wetDarken), 0, 1, 0.01],
+        ["statue", "wetReach", o(st, "wetReach"), 0, 4, 0.01],
+        ["statue", "dryTime", o(st, "dryTime"), 0.2, 30, 0.1],
+        ["statue", "foam", u(statue.uniforms.foam), 0, 2, 0.01],
 
         ["light", "color", c(light.color)],
-        ["light", "onBoat", o(tuned, "coreLight"), 0, 4000, 10],
+        ["light", "onStatue", o(tuned, "coreLight"), 0, 4000, 10],
         ["light", "moon", o(tuned, "moon"), 0, 6, 0.01],
         ["light", "ambient", o(tuned, "ambient"), 0, 3, 0.01],
 
@@ -113,6 +112,8 @@ export function buildPanel(ctx)
         ["shards", "light", u(debris.settings.light), 0, 2, 0.01],
         ["shards", "dark", u(debris.settings.dark), 0, 0.5, 0.005],
 
+        ["sea", "tideHeight", o(ocean.tide, "height"), 0, 8, 0.05],
+        ["sea", "tidePeriod", o(ocean.tide, "period"), 2, 60, 0.5],
         ["sea", "amplitude", u(ocean.settings.amplitude), 0, 3, 0.01],
         ["sea", "sharpness", u(ocean.settings.sharpness), 1, 5, 0.05],
         ["sea", "deep", c(ocean.settings.deep)],
@@ -177,7 +178,7 @@ export function buildPanel(ctx)
             try { await navigator.clipboard.writeText(JSON.stringify(values, null, 2)); toast("Settings copied"); }
             catch { toast("Copy failed"); }
         },
-        resetView: () => { controls.target.set(0, 8, 10); ctx.camera.position.set(0, 34, -110); controls.update(); },
+        resetView: () => { controls.target.set(0, 10, 8); ctx.camera.position.set(0, 22, -112); controls.update(); },
         reset: () => applyPreset("night"),
     };
 
@@ -210,7 +211,7 @@ export function buildPanel(ctx)
     gui.add(actions, "resetView").name("reset camera");
     gui.add(actions, "reset").name("reset everything");
 
-    folders.get("Boat").open();
+    folders.get("Statue").open();
 
     function sync()
     {

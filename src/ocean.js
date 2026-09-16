@@ -195,7 +195,18 @@ export function createOcean({ size, level, air, sky, clock, light })
     mesh.position.y = level;
     mesh.frustumCulled = false;
 
-    const ocean = { mesh, settings, level };
+    /* The tide: a slow rise and fall of the whole sea on top of the swell. It is what lets the statue
+       drown and surface again, so it lives on the CPU and is handed to the shader as the level. */
+    const tide = { height: 6.5, period: 18 };
+
+    const ocean = { mesh, settings, level, tide, levelNow: level, levelUniform, heightNode };
+
+    ocean.update = (time) =>
+    {
+        ocean.levelNow = level + Math.sin((time / Math.max(tide.period, 0.5)) * Math.PI * 2) * tide.height;
+        levelUniform.value = ocean.levelNow;
+        mesh.position.y = ocean.levelNow;
+    };
 
     ocean.heightAt = (x, z) =>
     {
