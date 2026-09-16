@@ -1,66 +1,78 @@
-﻿/* The panel, the address bar and the presets, from one list.
+import { BOATS } from "./boat.js";
+
+/* The panel, the address bar and the presets, from one list.
  *
- * Every tunable number is one row: a path, the object that holds it, a range. The panel is built from the
- * rows, presets are partial maps of paths, and whatever differs from the defaults is written into the
- * hash, so a night you liked can be sent as a link and comes back exactly. */
+ * Every tunable value is one row: a path, the thing that holds it, a range. The panel is built from the
+ * rows, presets are partial maps of paths, and whatever differs from the defaults goes into the hash, so a
+ * night you liked can be sent as a link and comes back exactly. */
 
 const PRESETS = {
     night: {},
     storm: {
         "sea.amplitude": 1.7, "sea.sharpness": 2.3, "sea.foamAmount": 0.85, "sea.glint": 1.2, "sea.mist": 0.22,
         "core.rate": 0.6, "core.flow": 4.2, "threads.amount": 0.75, "threads.speed": 0.34,
-        "dust.speed": 0.05, "dust.swirl": 1.2, "debris.drift": 4.6, "beam.intensity": 0.5,
+        "dust.speed": 0.05, "dust.swirl": 1.2, "shards.drift": 4.6, "column.intensity": 0.5, "boat.tilt": 1.1,
     },
     calm: {
         "sea.amplitude": 0.42, "sea.sharpness": 1.2, "sea.foamAmount": 0.08, "sea.ripple": 0.6, "sea.glint": 2.3, "sea.gloss": 170,
-        "core.rate": 0.18, "core.flow": 1.4, "threads.amount": 0.28, "threads.speed": 0.08, "debris.drift": 1.1, "dust.speed": 0.008,
+        "core.rate": 0.18, "core.flow": 1.4, "threads.amount": 0.28, "threads.speed": 0.08, "shards.drift": 1.1, "dust.speed": 0.008,
     },
     ember: {
         "light.color": "#ffb27a", "lens.tint": "#ffc9a0", "air.mistColor": "#c9a58c", "air.fogColor": "#0a0605",
-        "air.skyTop": "#070403", "air.skyBottom": "#120a07", "sky.intensity": 0.75,
+        "air.skyTop": "#070403", "air.skyBottom": "#120a07", "air.panorama": 0.75,
         "sea.deep": "#0f0b09", "sea.crest": "#2a221d", "sea.sssColor": "#6b4a36", "sea.foam": "#e6d6c8",
     },
     ghost: {
-        "beam.intensity": 1, "halo.intensity": 0.35, "threads.amount": 1.2, "threads.spark": 1.8,
-        "core.size": 0.34, "lens.bloom": 0.5, "lens.flare": 0.2, "debris.light": 0.5,
+        "column.intensity": 1, "halo.intensity": 0.35, "threads.amount": 1.2, "threads.spark": 1.8,
+        "core.size": 0.34, "lens.bloom": 0.5, "lens.flare": 0.2, "shards.light": 0.5, "boat.model": "ship",
     },
+};
+
+const LABELS = {
+    time: "Time", boat: "Boat", light: "Light", column: "Column", halo: "Halo", core: "Core sparks", threads: "Threads",
+    dust: "Dust", shards: "Shards", sea: "Sea", air: "Sky and air", lens: "Lens", view: "View",
 };
 
 export function buildPanel(ctx)
 {
-    const { gui, clock, intro, frame, lens, view, tuned, air, sky, ocean, light, sparks, flow, debris, bubble, boat, post } = ctx;
+    const { gui, clock, lens, view, tuned, air, ocean, light, sparks, flow, debris, boat, post, controls, toast } = ctx;
 
     const u = (uniform) => ({ get: () => uniform.value, set: (v) => { uniform.value = v; } });
     const c = (uniform) => ({ get: () => `#${uniform.value.getHexString()}`, set: (v) => { uniform.value.set(v); }, color: true });
-    const o = (object, key) => ({ get: () => object[key], set: (v) => { object[key] = v; } });
+    const o = (object, key, after) => ({ get: () => object[key], set: (v) => { object[key] = v; after?.(); } });
+
+    const b = boat.settings;
+    const refit = () => boat.fit();
 
     /* folder, name, accessor, min, max, step */
     const rows = [
-        ["journey", "progress", o(intro, "target"), 0, 1, 0.001],
-        ["journey", "wheelStep", o(intro, "step"), 0.005, 0.2, 0.005],
-        ["journey", "smoothing", o(intro, "ease"), 0.01, 0.3, 0.005],
-        ["journey", "timeScale", o(clock, "speed"), 0, 3, 0.01],
+        ["time", "speed", o(clock, "speed"), 0, 3, 0.01],
 
-        ["bubble", "frequency", u(bubble.settings.frequency), 0.05, 1.2, 0.005],
-        ["bubble", "speed", u(bubble.settings.speed), 0, 60, 0.1],
-        ["bubble", "spray", u(bubble.settings.spray), -0.8, 1.2, 0.01],
-        ["bubble", "fstop", u(bubble.settings.fstop), 0.8, 16, 0.05],
-        ["bubble", "grain", u(bubble.settings.grain), 0.0005, 0.02, 0.0001],
-        ["bubble", "opacity", o(frame, "opacity"), 0, 1.5, 0.01],
-        ["bubble", "distance", o(frame, "distance"), 3, 25, 0.1],
-        ["bubble", "radiusStart", o(frame, "radiusStart"), 0.2, 3, 0.01],
-        ["bubble", "radiusEnd", o(frame, "radiusEnd"), 0.3, 6, 0.01],
-        ["bubble", "focusShift", o(frame, "focusShift"), -1.5, 1.5, 0.01],
+        ["boat", "model", { ...o(b, "model", () => boat.setModel(b.model)), options: Object.keys(BOATS) }],
+        ["boat", "size", o(b, "size", refit), 0.3, 3, 0.01],
+        ["boat", "sink", o(b, "sink", refit), 0, 3, 0.01],
+        ["boat", "x", o(b, "x"), -40, 40, 0.1],
+        ["boat", "z", o(b, "z"), -40, 40, 0.1],
+        ["boat", "heading", o(b, "heading"), -180, 180, 1],
+        ["boat", "tilt", o(b, "tilt"), 0, 2, 0.01],
+        ["boat", "brightness", o(b, "brightness", () => boat.applyBrightness()), 0, 1.5, 0.01],
+        ["boat", "figure", o(b, "figure", () => boat.placeFigure())],
+        ["boat", "lookUp", o(b, "headTilt"), -1.2, 1.2, 0.01],
 
         ["light", "color", c(light.color)],
-        ["beam", "intensity", o(tuned, "beam"), 0, 3, 0.01],
-        ["beam", "sharpness", u(light.beam.sharpness), 0.5, 12, 0.05],
-        ["beam", "groundWidth", u(light.beam.groundWidth), 0.05, 1, 0.005],
-        ["beam", "coreWidth", u(light.beam.coreWidth), 0.005, 0.4, 0.001],
-        ["beam", "topWidth", u(light.beam.topWidth), 0.005, 0.4, 0.001],
-        ["beam", "fallDown", u(light.beam.fallDown), 0, 8, 0.05],
-        ["beam", "fallUp", u(light.beam.fallUp), 0, 12, 0.05],
-        ["beam", "texture", u(light.beam.texture), 0, 1, 0.01],
+        ["light", "onBoat", o(tuned, "coreLight"), 0, 4000, 10],
+        ["light", "moon", o(tuned, "moon"), 0, 6, 0.01],
+        ["light", "ambient", o(tuned, "ambient"), 0, 3, 0.01],
+
+        ["column", "intensity", o(tuned, "beam"), 0, 3, 0.01],
+        ["column", "sharpness", u(light.beam.sharpness), 0.5, 12, 0.05],
+        ["column", "groundWidth", u(light.beam.groundWidth), 0.05, 1, 0.005],
+        ["column", "coreWidth", u(light.beam.coreWidth), 0.005, 0.4, 0.001],
+        ["column", "topWidth", u(light.beam.topWidth), 0.005, 0.4, 0.001],
+        ["column", "fallDown", u(light.beam.fallDown), 0, 8, 0.05],
+        ["column", "fallUp", u(light.beam.fallUp), 0, 12, 0.05],
+        ["column", "texture", u(light.beam.texture), 0, 1, 0.01],
+
         ["halo", "intensity", o(tuned, "halo"), 0, 3, 0.01],
         ["halo", "size", o(light.halo, "size"), 4, 120, 1],
         ["halo", "tight", u(light.halo.tight), 2, 80, 0.5],
@@ -96,10 +108,10 @@ export function buildPanel(ctx)
         ["dust", "swirl", u(sparks.dust.swirl), 0, 4, 0.01],
         ["dust", "reach", u(sparks.dust.reach), 2, 80, 0.5],
 
-        ["debris", "drift", u(debris.settings.drift), 0, 8, 0.01],
-        ["debris", "spin", u(debris.settings.spin), 0, 2, 0.01],
-        ["debris", "light", u(debris.settings.light), 0, 2, 0.01],
-        ["debris", "dark", u(debris.settings.dark), 0, 0.5, 0.005],
+        ["shards", "drift", u(debris.settings.drift), 0, 8, 0.01],
+        ["shards", "spin", u(debris.settings.spin), 0, 2, 0.01],
+        ["shards", "light", u(debris.settings.light), 0, 2, 0.01],
+        ["shards", "dark", u(debris.settings.dark), 0, 0.5, 0.005],
 
         ["sea", "amplitude", u(ocean.settings.amplitude), 0, 3, 0.01],
         ["sea", "sharpness", u(ocean.settings.sharpness), 1, 5, 0.05],
@@ -118,9 +130,9 @@ export function buildPanel(ctx)
         ["sea", "mist", u(ocean.settings.mist), 0, 1, 0.01],
         ["sea", "mistCeiling", u(ocean.settings.mistCeiling), 0.1, 6, 0.05],
 
+        ["air", "panorama", o(tuned, "sky"), 0, 1, 0.01],
         ["air", "skyTop", c(air.skyTop)],
         ["air", "skyBottom", c(air.skyBottom)],
-        ["sky", "intensity", u(sky.settings.intensity), 0, 3, 0.01],
         ["air", "fogNear", u(air.fogNear), 0, 200, 1],
         ["air", "fogFar", u(air.fogFar), 10, 400, 1],
         ["air", "fogColor", c(air.fogColor)],
@@ -134,12 +146,14 @@ export function buildPanel(ctx)
         ["lens", "flare", o(lens, "flare"), 0, 1, 0.005],
         ["lens", "flareSpread", o(lens, "spread"), 0, 1, 0.01],
         ["lens", "tint", c(post.flare.tint)],
-        ["lens", "bandStart", o(lens, "bandStart"), 0, 0.5, 0.005],
+        ["lens", "bandStart", u(post.band.start), 0, 0.5, 0.005],
         ["lens", "bandEnd", u(post.band.end), 0.05, 1, 0.005],
         ["lens", "bandBlur", u(post.band.amount), 0, 0.02, 0.0001],
 
-        ["camera", "drift", o(view, "drift"), 0, 3, 0.01],
-        ["camera", "headTilt", o(boat, "headTilt"), -1.2, 1.2, 0.01],
+        ["view", "fov", o(view, "fov"), 10, 70, 0.5],
+        ["view", "drift", o(view, "drift"), 0, 3, 0.01],
+        ["view", "autoRotate", o(view, "autoRotate")],
+        ["view", "rotateSpeed", o(controls, "autoRotateSpeed"), -3, 3, 0.01],
     ];
 
     const entries = rows.map(([folder, name, access, min, max, step]) => ({ path: `${folder}.${name}`, folder, name, access, min, max, step }));
@@ -147,60 +161,67 @@ export function buildPanel(ctx)
     const defaults = new Map(entries.map((entry) => [entry.path, entry.access.get()]));
 
     const proxy = {};
-    const controllers = [];
     const folders = new Map();
-    const LABELS = { journey: "Journey", bubble: "Bubble", light: "Light", beam: "Column", halo: "Halo", core: "Core sparks", threads: "Threads", dust: "Dust", debris: "Shards", sea: "Sea", air: "Air", sky: "Air", lens: "Lens", camera: "Camera" };
-
     const state = { preset: "night" };
+
     const actions = {
-        replay: () => { ctx.replay(); sync(); },
-        toSea: () => { intro.target = 1; sync(); },
         paused: clock.paused,
-        copyLink: () => navigator.clipboard?.writeText(location.href).then(() => toast("Link copied")),
+        copyLink: async () =>
+        {
+            try { await navigator.clipboard.writeText(location.href); toast("Link copied"); }
+            catch { toast("Copy failed, the address bar has it"); }
+        },
+        copySettings: async () =>
+        {
+            const values = Object.fromEntries(entries.map((entry) => [entry.path, entry.access.get()]));
+            try { await navigator.clipboard.writeText(JSON.stringify(values, null, 2)); toast("Settings copied"); }
+            catch { toast("Copy failed"); }
+        },
+        resetView: () => { controls.target.set(0, 8, 10); ctx.camera.position.set(0, 34, -110); controls.update(); },
         reset: () => applyPreset("night"),
     };
 
-    const top = gui;
-    top.add(state, "preset", Object.keys(PRESETS)).name("preset").onChange((name) => applyPreset(name));
-    top.add(actions, "replay").name("replay the bubble");
-    top.add(actions, "toSea").name("skip to the sea");
-    top.add(actions, "paused").name("freeze time").onChange((v) => { clock.paused = v; });
-    top.add(actions, "copyLink").name("copy link to this look");
-    top.add(actions, "reset").name("reset");
+    gui.add(state, "preset", Object.keys(PRESETS)).name("preset").onChange((name) => applyPreset(name));
 
     for(const entry of entries)
     {
         const label = LABELS[entry.folder];
-        if(!folders.has(label)) folders.set(label, top.addFolder(label).close());
+        if(!folders.has(label)) folders.set(label, gui.addFolder(label).close());
         const folder = folders.get(label);
 
         proxy[entry.path] = entry.access.get();
 
-        const controller = entry.access.color
-            ? folder.addColor(proxy, entry.path)
-            : folder.add(proxy, entry.path, entry.min, entry.max, entry.step);
+        let controller;
+        if(entry.access.color) controller = folder.addColor(proxy, entry.path);
+        else if(entry.access.options) controller = folder.add(proxy, entry.path, entry.access.options);
+        else if(typeof proxy[entry.path] === "boolean") controller = folder.add(proxy, entry.path);
+        else controller = folder.add(proxy, entry.path, entry.min, entry.max, entry.step);
 
-        controller.name(entry.folder === "sky" ? "skyIntensity" : entry.name).onChange((value) =>
+        controller.name(entry.name).onChange((value) =>
         {
             entry.access.set(value);
             saveSoon();
         });
-
-        controllers.push(controller);
     }
 
-    folders.get("Journey").open();
+    gui.add(actions, "paused").name("freeze time").onChange((v) => { clock.paused = v; });
+    gui.add(actions, "copyLink").name("copy link to this night");
+    gui.add(actions, "copySettings").name("copy settings as JSON");
+    gui.add(actions, "resetView").name("reset camera");
+    gui.add(actions, "reset").name("reset everything");
+
+    folders.get("Boat").open();
 
     function sync()
     {
         for(const entry of entries) proxy[entry.path] = entry.access.get();
         actions.paused = clock.paused;
-        for(const controller of top.controllersRecursive()) controller.updateDisplay();
+        for(const controller of gui.controllersRecursive()) controller.updateDisplay();
     }
 
     function applyPreset(name)
     {
-        for(const entry of entries) if(entry.path !== "journey.progress") entry.access.set(defaults.get(entry.path));
+        for(const entry of entries) entry.access.set(defaults.get(entry.path));
         for(const [path, value] of Object.entries(PRESETS[name] ?? {})) byPath.get(path)?.access.set(value);
         state.preset = name;
         sync();
@@ -224,7 +245,6 @@ export function buildPanel(ctx)
 
         for(const entry of entries)
         {
-            if(entry.path === "journey.progress") continue;
             const value = entry.access.get();
             const reference = base.get(entry.path);
 
@@ -232,13 +252,16 @@ export function buildPanel(ctx)
             {
                 if(Math.abs(value - reference) > 1e-6) params.set(entry.path, String(Math.round(value * 10000) / 10000));
             }
+            else if(typeof value === "boolean")
+            {
+                if(value !== reference) params.set(entry.path, value ? "1" : "0");
+            }
             else if(String(value).toLowerCase() !== String(reference).toLowerCase())
             {
                 params.set(entry.path, String(value).replace(/^#/, ""));
             }
         }
 
-        if(intro.target >= 0.999) params.set("sea", "1");
         if(/webgl/i.test(location.hash)) params.set("webgl", "1");
 
         const hash = params.toString();
@@ -256,33 +279,20 @@ export function buildPanel(ctx)
             const entry = byPath.get(path);
             if(!entry) continue;
 
+            const fallback = defaults.get(path);
+
             if(entry.access.color) { if(/^[0-9a-f]{6}$/i.test(raw)) entry.access.set(`#${raw}`); }
+            else if(entry.access.options) { if(entry.access.options.includes(raw)) entry.access.set(raw); }
+            else if(typeof fallback === "boolean") entry.access.set(raw === "1");
             else { const value = Number(raw); if(Number.isFinite(value)) entry.access.set(value); }
         }
 
-        if(params.get("sea") === "1") { intro.target = 1; intro.progress = 1; }
         sync();
-    }
-
-    const toastElement = document.querySelector(".toast");
-    function toast(text)
-    {
-        toastElement.textContent = text;
-        toastElement.classList.add("is-on");
-        setTimeout(() => toastElement.classList.remove("is-on"), 1400);
     }
 
     readHash();
 
-    /* Scrolling moves the journey slider, so the hash follows it with the same delay. */
-    let lastTarget = intro.target;
-    setInterval(() =>
-    {
-        if(intro.target !== lastTarget) { lastTarget = intro.target; saveSoon(); }
-    }, 400);
+    if(innerWidth < 720) gui.close();
 
-    /* Closed by default: open, it covers the right-hand title. */
-    gui.close();
-
-    return { sync, replay: actions.replay };
+    return { sync };
 }

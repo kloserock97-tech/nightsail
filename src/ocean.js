@@ -58,7 +58,7 @@ export function createOcean({ size, level, air, sky, clock, light })
         mist: uniform(0.08),
         mistCeiling: uniform(1.1),
 
-        /* 0 hides the sea in the fog colour, 1 shows it: the intro raises it together with the light. */
+        /* 0 hides the sea in the fog colour, 1 shows it. */
         appear: uniform(1),
     };
 

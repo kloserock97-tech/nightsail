@@ -1,26 +1,23 @@
 import * as THREE from "three/webgpu";
 import { color, mix, uniform, viewportUV } from "three/tsl";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import GUI from "lil-gui";
-import { createClock, smoothstep } from "./clock.js";
+import { createClock } from "./clock.js";
 import { createSky } from "./sky.js";
 import { createOcean } from "./ocean.js";
 import { createLight, CORE } from "./light.js";
 import { createSparks } from "./sparks.js";
 import { createFlow } from "./flow.js";
 import { createDebris } from "./debris.js";
-import { createBubble } from "./bubble.js";
 import { createBoat } from "./boat.js";
 import { createPost } from "./post.js";
 import { buildPanel } from "./panel.js";
 
-/* Nightsail.
- *
- * The first screen is a bubble of points hanging in the dark. Scrolling sends it into the distance, where
- * it unwinds into threads and settles as the core of a column of light, while a night sea, a boat and a
- * figure assemble around it. Scroll back and it all comes apart again.
+/* Nightsail: a column of light over a night sea, with a boat right under it.
  *
  * The lighting is almost entirely fake, and that is the point: there is one light source at a known spot,
- * so every material brightens by "how much do I face the core" instead of asking a lighting system. */
+ * so the sea, the shards and the air brighten by how much they face the core and how close they are to its
+ * axis, instead of asking a lighting system. */
 
 const SEA_LEVEL = 3.6;
 const SEA_SIZE = 300;
@@ -32,8 +29,7 @@ const clock = createClock();
 const renderer = new THREE.WebGPURenderer({
     canvas,
     powerPreference: "high-performance",
-    /* #webgl in the address forces the WebGL2 backend, the only way to check the fallback on a machine
-       that has WebGPU. */
+    /* #webgl in the address forces the WebGL2 backend. */
     forceWebGL: /webgl/i.test(location.hash),
     antialias: devicePixelRatio < 2,
 });
@@ -52,7 +48,7 @@ catch(error)
 }
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(25, innerWidth / innerHeight, 0.1, 400);
+const camera = new THREE.PerspectiveCamera(25, innerWidth / innerHeight, 0.1, 600);
 
 /* The air: shared by the sea, the shards and the sky. */
 const air = {
@@ -68,10 +64,10 @@ const air = {
 };
 
 const sky = createSky(`${BASE}sky.hdr`);
-const skyAmount = uniform(0);
+const skyAmount = uniform(1);
 
-/* The background is a mix, not a swap: replacing the node would recompile it. Before the sea assembles
-   it is a dark corner-to-corner gradient; after, the rendered panorama. */
+/* The background is a mix, not a swap: replacing the node would recompile it. Panorama at 1, a dark
+   corner-to-corner gradient at 0. */
 scene.backgroundNode = mix(mix(air.skyTop, air.skyBottom, viewportUV.length().smoothstep(0, 1)), sky.background(), skyAmount);
 
 const light = createLight({ clock });
@@ -79,166 +75,86 @@ const ocean = createOcean({ size: SEA_SIZE, level: SEA_LEVEL, air, sky, clock, l
 const sparks = createSparks({ clock, light });
 const flow = createFlow({ clock, light });
 const debris = createDebris({ clock, air });
-const bubble = createBubble({ clock, renderer, scene });
-const boat = createBoat({ figureUrl: `${BASE}figure.glb` });
+const boat = createBoat({ base: BASE });
 
 scene.add(ocean.mesh, light.group, sparks.mesh, flow.mesh, debris.mesh, boat.group);
 
-/* The only real lights are for the boat and the figure: a weak steel moonlight from behind the column and
-   the core itself, so the hull reads as a silhouette with a lit rim. */
+/* The only real lights are for the boat and the figure: weak steel moonlight from behind the column and
+   the core itself, so the boat reads as a silhouette with a lit rim. */
 const moon = new THREE.DirectionalLight("#8a96b8", 1.4);
 moon.position.set(12, 50, 70);
 const coreLight = new THREE.PointLight("#dfe8ff", 900, 0, 2);
 coreLight.position.set(0, CORE, 0);
-scene.add(moon, coreLight, new THREE.HemisphereLight("#1a2230", "#040608", 0.5));
+const ambient = new THREE.HemisphereLight("#1a2230", "#040608", 0.5);
+scene.add(moon, coreLight, ambient);
 
 const post = createPost({ renderer, scene, camera });
 
-/* ── the frame ────────────────────────────────────────────────────────────── */
+/* ── the view ─────────────────────────────────────────────────────────────── */
 
 /* A wide shot from high and far back: the whole sea, the boat and the column fit at once. */
+camera.position.set(0, 34, -110);
+
+const controls = new OrbitControls(camera, canvas);
+controls.target.set(0, 8, 10);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 12;
+controls.maxDistance = 240;
+controls.maxPolarAngle = Math.PI * 0.49; // below the surface there is nothing to see
+controls.autoRotateSpeed = 0.25;
+controls.update();
+
 const view = {
-    position: new THREE.Vector3(0, 34, -110),
-    target: new THREE.Vector3(0, 8, 10),
-    drift: 1,
+    drift: 1,          // slow breathing of the camera on three sines
+    autoRotate: false,
+    fov: 25,
 };
 
-sky.settings.rotation.value = -Math.atan2(-view.position.z, -view.position.x);
+const lens = { flare: 0.085, spread: 1 };
 
-/* The flight. `target` is how far the visitor has scrolled, `progress` is where the bubble is; easing
-   between them hides the steps of a mouse wheel. */
-const intro = {
-    target: 0,
-    progress: 0,
-    step: 0.04,
-    ease: 0.05,
-};
-
-const frame = {
-    distance: 12,     // how far in front of the camera the bubble hangs on the first screen
-    radiusStart: 0.8,
-    radiusEnd: 2.2,   // and how big it is once it has become the core
-    focusShift: 0,
-    opacity: 0.3,
-};
-
-const lens = { flare: 0.085, spread: 1, bandStart: 0.2 };
-
-const titles = {
-    hero: document.querySelector(".title-hero"),
-    sea: document.querySelector(".title-sea"),
-};
-
-function advance(amount)
-{
-    intro.target = Math.min(1, Math.max(0, intro.target + amount));
-    panel.sync();
-}
-
-addEventListener("wheel", (event) =>
-{
-    if(event.target.closest?.(".lil-gui")) return;
-    event.preventDefault();
-    advance(Math.sign(event.deltaY) * Math.min(1, Math.abs(event.deltaY) / 100) * intro.step);
-}, { passive: false });
-
-let touchY = 0;
-addEventListener("touchstart", (event) => { touchY = event.touches[0].clientY; }, { passive: true });
-addEventListener("touchmove", (event) =>
-{
-    if(event.target.closest?.(".lil-gui")) return;
-    const y = event.touches[0].clientY;
-    /* One swipe across the screen equals eight wheel clicks: the gesture is long, no need to slice it as fine. */
-    advance(((touchY - y) / innerHeight) * intro.step * 8);
-    touchY = y;
-}, { passive: true });
+/* Tuned values the panel edits; the core light follows the column's brightness. */
+const tuned = { beam: 0.6, halo: 0, scatter: 0.4, sky: 1, moon: 1.4, ambient: 0.5, coreLight: 900 };
 
 const core = new THREE.Vector3(0, CORE, 0);
-const look = new THREE.Vector3();
-const bubblePoint = new THREE.Vector3();
 const probe = new THREE.Vector3();
-
-function updateCamera()
-{
-    const t = clock.elapsed;
-    const d = view.drift;
-
-    /* Slow drift on three sines that never line up. */
-    camera.position.copy(view.position);
-    camera.position.x += (Math.sin(t * 0.11) * 2.2 + Math.sin(t * 0.29) * 0.6) * d;
-    camera.position.y += Math.sin(t * 0.17 + 1.3) * 1.1 * d;
-    camera.position.z += Math.sin(t * 0.07 + 2.1) * 1.6 * d;
-
-    look.copy(view.target);
-    look.x += Math.sin(t * 0.13 + 0.7) * 1.4 * d;
-    look.y += Math.sin(t * 0.23 + 2.6) * 0.7 * d;
-
-    camera.lookAt(look);
-    camera.updateMatrixWorld();
-}
-
-function updateIntro()
-{
-    intro.progress += (intro.target - intro.progress) * intro.ease;
-    if(Math.abs(intro.target - intro.progress) < 1e-4) intro.progress = intro.target;
-
-    const p = intro.progress;
-
-    /* Position eases with a power: screen size falls as one over distance, so a linear flight would lurch
-       at the start. Starting point is taken along the view direction, so the bubble breathes with the camera. */
-    camera.getWorldDirection(probe);
-    const start = camera.position.clone().addScaledVector(probe, frame.distance);
-    bubblePoint.lerpVectors(start, core, Math.pow(p, 0.55));
-    bubble.setPosition(bubblePoint);
-
-    const s = bubble.settings;
-    s.radius.value = frame.radiusStart + p * (frame.radiusEnd - frame.radiusStart);
-    /* Focus rides with the bubble and sits in its middle: most points are near that plane, and they give
-       the sharp grain. Move the plane to an edge and a hundred big soft discs merge into a white blot. */
-    s.focus.value = camera.position.distanceTo(bubblePoint) + frame.focusShift * s.radius.value;
-    s.dissolve.value = smoothstep(0.7, 1, p);
-    s.opacity.value = frame.opacity * (1 - smoothstep(0.86, 1, p));
-    bubble.setVisible(s.opacity.value > 0.001);
-
-    /* The sea assembles only after the first turns of the wheel; the light rises with it, not after it. */
-    const assembly = smoothstep(0.12, 0.92, p);
-    const glow = smoothstep(0.22, 0.85, p);
-
-    skyAmount.value = assembly;
-    ocean.settings.appear.value = assembly;
-    post.band.start.value = 0.5 + (lens.bandStart - 0.5) * assembly;
-
-    for(const object of [light.group, sparks.mesh, flow.mesh, debris.mesh]) object.visible = glow > 0;
-    boat.group.visible = glow > 0;
-    ocean.mesh.visible = assembly > 0;
-
-    light.beam.intensity.value = tuned.beam * glow;
-    light.halo.intensity.value = tuned.halo * glow;
-    air.scatter.value = tuned.scatter * glow;
-    coreLight.intensity = 900 * glow;
-    post.flare.intensity.value = lens.flare * glow;
-
-    titles.hero.style.opacity = String(1 - smoothstep(0.04, 0.22, p));
-    titles.sea.style.opacity = String(smoothstep(0.55, 0.9, p));
-    document.documentElement.classList.toggle("is-sea", p > 0.5);
-}
-
-/* The panel edits the full-strength values; the intro scales them down on the way in. */
-const tuned = { beam: 0.6, halo: 0, scatter: 0.4 };
+const breath = new THREE.Vector3();
+const lookBreath = new THREE.Vector3();
 
 function frameLoop()
 {
     clock.tick();
-    updateCamera();
-    updateIntro();
 
-    bubble.update();
-    if(sparks.mesh.visible) sparks.update(camera);
-    if(debris.mesh.visible) debris.update();
+    controls.autoRotate = view.autoRotate;
+    controls.update(clock.delta);
 
-    boat.float(ocean, 0, 0, Math.PI * 0.06, clock.delta);
-    if(boat.head) boat.head.rotation.x -= Math.sin(clock.elapsed * 0.4) * 0.04;
+    if(camera.fov !== view.fov) { camera.fov = view.fov; camera.updateProjectionMatrix(); }
 
+    /* Breathing goes on top of the orbit and is taken off again after the frame, so it never fights the controls. */
+    const t = clock.elapsed;
+    const d = view.drift;
+    breath.set((Math.sin(t * 0.11) * 2.2 + Math.sin(t * 0.29) * 0.6) * d, Math.sin(t * 0.17 + 1.3) * 1.1 * d, Math.sin(t * 0.07 + 2.1) * 1.6 * d);
+    lookBreath.set(Math.sin(t * 0.13 + 0.7) * 1.4 * d, Math.sin(t * 0.23 + 2.6) * 0.7 * d, 0);
+
+    camera.position.add(breath);
+    camera.lookAt(probe.copy(controls.target).add(lookBreath));
+    camera.updateMatrixWorld();
+
+    light.beam.intensity.value = tuned.beam;
+    light.halo.intensity.value = tuned.halo;
+    air.scatter.value = tuned.scatter;
+    skyAmount.value = tuned.sky;
+    moon.intensity = tuned.moon;
+    ambient.intensity = tuned.ambient;
+    coreLight.intensity = tuned.coreLight;
+    coreLight.color.copy(light.color.value);
+    post.flare.intensity.value = lens.flare;
+
+    sky.settings.rotation.value = -Math.atan2(-camera.position.z, -camera.position.x);
+
+    sparks.update(camera);
+    debris.update();
+    boat.float(ocean, clock.delta, clock.elapsed);
     light.face(camera);
 
     probe.copy(core).project(camera);
@@ -246,19 +162,25 @@ function frameLoop()
     post.shapeFlare(lens.spread);
 
     post.pipeline.render();
+
+    camera.position.sub(breath);
     stats.tick();
 }
 
-/* ── the panel ────────────────────────────────────────────────────────────── */
+/* ── panel, stats, keys ───────────────────────────────────────────────────── */
+
+const toastElement = document.querySelector(".toast");
+function toast(text)
+{
+    toastElement.textContent = text;
+    toastElement.classList.add("is-on");
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => toastElement.classList.remove("is-on"), 1400);
+}
 
 const panel = buildPanel({
-    gui: new GUI({ title: "Nightsail" }),
-    clock, intro, frame, lens, view, tuned, air, sky, ocean, light, sparks, flow, debris, bubble, boat, post,
-    replay()
-    {
-        intro.target = 0;
-        intro.progress = 0;
-    },
+    gui: new GUI({ title: "Nightsail", width: 300 }),
+    clock, lens, view, tuned, air, ocean, light, sparks, flow, debris, boat, post, controls, camera, toast,
 });
 
 const stats = (() =>
@@ -293,16 +215,13 @@ post.flare.aspect.value = innerWidth / innerHeight;
 
 addEventListener("keydown", (event) =>
 {
-    if(event.target.closest?.("input, .lil-gui")) return;
+    if(event.target.closest?.("input, select, .lil-gui")) return;
 
-    if(event.code === "ArrowDown" || event.code === "PageDown") advance(intro.step * 2);
-    else if(event.code === "ArrowUp" || event.code === "PageUp") advance(-intro.step * 2);
-    else if(event.code === "KeyH") document.documentElement.classList.toggle("is-clean");
+    if(event.code === "KeyH") document.documentElement.classList.toggle("is-clean");
     else if(event.code === "Space") { clock.paused = !clock.paused; panel.sync(); event.preventDefault(); }
-    else if(event.code === "KeyR") panel.replay();
 });
 
 renderer.setAnimationLoop(frameLoop);
 
 /* Exposed for screenshots and the curious. */
-window.nightsail = { intro, frame, lens, view, clock, renderer, scene, camera, panel };
+window.nightsail = { clock, renderer, scene, camera, controls, view, boat, panel };

@@ -4,7 +4,7 @@ import { uniform } from "three/tsl";
  *
  * Two readings of the same time. `elapsed` is plain seconds and drives everything computed on the CPU
  * (particles, debris, the boat, the camera drift). `shader` runs twice as fast and feeds the GPU side
- * (waves, the beam texture, the flow heads, the bubble field): the look was tuned with that ratio and
+ * (waves, the beam texture, the flow heads): the look was tuned with that ratio and
  * halving it makes the sea read as syrup. The ocean's CPU sampler reads `shaderSeconds`, so the boat
  * and the water it rides always agree. */
 
@@ -37,8 +37,3 @@ export function createClock()
     return clock;
 }
 
-export function smoothstep(from, to, value)
-{
-    const t = Math.min(1, Math.max(0, (value - from) / (to - from)));
-    return t * t * (3 - 2 * t);
-}

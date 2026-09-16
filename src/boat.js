@@ -3,129 +3,150 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 /* The boat and the figure standing in it.
  *
- * The hull is built from numbers, the way a real one is drawn: stations along the length, each with a
- * half width and a depth, stitched into a surface. Flat normals on purpose: at this distance and against
- * a light this strong the boat is a silhouette with a few catching planes. A wheelhouse, a mast and a
- * dim lantern make it a working boat rather than a bathtub.
- *
- * The figure is "Hoodie Character" by Quaternius (CC0), trimmed to one idle clip. Its head is tipped up
- * towards the light on top of the animation every frame. */
+ * Boats are low-poly models from Kenney's Pirate Kit (CC0), switchable from the panel. Each model gets a
+ * length it is scaled to and how deep it sits, so a rowboat and a small ship both float right. The figure
+ * is "Hoodie Character" by Quaternius (CC0), trimmed to one idle clip; it is placed by casting a ray down
+ * onto the deck, so it stands on whatever model is loaded, and its head is tipped towards the light on top
+ * of the animation every frame. */
 
-const STATIONS = 14;
-const RINGS = 3;
+export const BOATS = {
+    rowboat: { file: "boat-row-large.glb", length: 5.8, sink: 0.3, stand: -0.2 },
+    sloop: { file: "ship-small.glb", length: 11, sink: 1.0, stand: -0.05 },
+    ship: { file: "ship-medium.glb", length: 14, sink: 1.0, stand: -0.1 },
+};
 
-function hullGeometry({ length, beam, draft, sheer })
+export function createBoat({ base })
 {
-    const rows = [];
-
-    for(let s = 0; s <= STATIONS; s++)
-    {
-        const t = s / STATIONS; // 0 at the stern, 1 at the bow
-
-        /* Full at the stern and amidships, fine at the bow. */
-        const fullness = Math.pow(Math.sin(Math.PI * Math.min(0.5 + t * 0.52, 1)), 0.55);
-        const halfWidth = (beam / 2) * fullness * (t < 0.04 ? 0.86 : 1);
-        const depth = draft * Math.pow(Math.sin(Math.PI * Math.min(0.5 + t * 0.51, 1)), 0.45);
-
-        /* The deck line lifts towards the bow. One line, and the boat stops looking like a tub. */
-        const rise = sheer * Math.pow(Math.max(t - 0.35, 0) / 0.65, 2);
-        const z = (t - 0.5) * length;
-
-        const row = [];
-
-        for(let r = 0; r <= RINGS; r++)
-        {
-            const k = r / RINGS;
-            row.push(new THREE.Vector3(halfWidth * Math.pow(k, 0.7), -depth * (1 - k) + rise * k, z));
-        }
-
-        rows.push(row);
-    }
-
-    const positions = [];
-    const push = (...points) => { for(const p of points) positions.push(p.x, p.y, p.z); };
-
-    for(let s = 0; s < STATIONS; s++)
-    {
-        for(let r = 0; r < RINGS; r++)
-        {
-            for(const side of [1, -1])
-            {
-                const [p00, p10, p01, p11] = [rows[s][r], rows[s + 1][r], rows[s][r + 1], rows[s + 1][r + 1]]
-                    .map((p) => p.clone().setX(p.x * side));
-
-                if(side > 0) push(p00, p11, p10, p00, p01, p11);
-                else push(p00, p10, p11, p00, p11, p01);
-            }
-        }
-
-        const a = rows[s][RINGS], b = rows[s + 1][RINGS];
-        const c = a.clone().setX(-a.x), d = b.clone().setX(-b.x);
-        push(a, b, d, a, d, c);
-    }
-
-    /* Transom: close the square stern. */
-    const stern = rows[0];
-    for(let r = 0; r < RINGS; r++)
-    {
-        const p0 = stern[r], p1 = stern[r + 1];
-        const m0 = p0.clone().setX(-p0.x), m1 = p1.clone().setX(-p1.x);
-        push(p0, m0, m1, p0, m1, p1);
-    }
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-    geometry.computeVertexNormals();
-
-    return geometry;
-}
-
-export function createBoat({ figureUrl })
-{
-    const shape = { length: 8.4, beam: 3.1, draft: 1.5, sheer: 0.7 };
-    const deck = 0.25;
+    const settings = {
+        model: "rowboat",
+        x: 0,
+        z: 0,
+        heading: 11,     // degrees
+        size: 1,         // on top of the model's own length
+        sink: 1,         // on top of the model's own draft
+        tilt: 0.85,      // how willingly it lies on the slope of a wave
+        brightness: 0.55,
+        figure: true,
+        headTilt: 0.34,
+    };
 
     const group = new THREE.Group();
     group.rotation.order = "YXZ"; // heading first, then pitch and roll
 
-    const hullMaterial = new THREE.MeshStandardMaterial({ color: "#1a1c1f", roughness: 0.9, flatShading: true, side: THREE.DoubleSide });
-    const trimMaterial = new THREE.MeshStandardMaterial({ color: "#2b2d30", roughness: 0.75, flatShading: true });
-    const glassMaterial = new THREE.MeshStandardMaterial({ color: "#0c0e10", roughness: 0.3, metalness: 0.2 });
-
-    const hull = new THREE.Mesh(hullGeometry(shape), hullMaterial);
+    const hull = new THREE.Group();
     group.add(hull);
 
-    /* Wheelhouse towards the stern, with a dark band of windows and a flat roof. */
-    const house = new THREE.Mesh(new THREE.BoxGeometry(1.9, 1.7, 2.1), trimMaterial);
-    house.position.set(0, deck + 0.85, -1.4);
-    const windows = new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.42, 1.2), glassMaterial);
-    windows.position.set(0, deck + 1.25, -0.95);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 2.5), trimMaterial);
-    roof.position.set(0, deck + 1.76, -1.4);
+    const loader = new GLTFLoader();
+    const cache = new Map();
+    const raycaster = new THREE.Raycaster();
 
-    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 4.6, 6), trimMaterial);
-    mast.position.set(0, deck + 1.8 + 2.3, -1.1);
-    const yard = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.8, 5), trimMaterial);
-    yard.rotation.z = Math.PI / 2;
-    yard.position.set(0, deck + 5.2, -1.1);
+    const boat = { group, settings, figure: null, head: null, mixer: null, model: null, deck: 0 };
 
-    /* A lantern on the mast: barely warm, the only thing in the frame that is not the column's colour. */
-    const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), new THREE.MeshBasicMaterial({ color: "#ffc98a" }));
-    lantern.position.set(0, deck + 3.4, -0.98);
+    let figureRoot = null;
+    const materials = [];
 
-    group.add(house, windows, roof, mast, yard, lantern);
+    const load = (url) =>
+    {
+        if(!cache.has(url)) cache.set(url, new Promise((resolve, reject) => loader.load(url, resolve, undefined, reject)));
+        return cache.get(url);
+    };
 
-    const boat = { group, draft: shape.draft, figure: null, head: null, mixer: null, headTilt: 0.34 };
+    const applyBrightness = () =>
+    {
+        for(const { material, original } of materials) material.color.copy(original).multiplyScalar(settings.brightness);
+    };
 
-    new GLTFLoader().load(figureUrl, (gltf) =>
+    /* Stand the figure on the deck: a ray straight down at the chosen spot finds the top surface. */
+    const placeFigure = () =>
+    {
+        if(!figureRoot || !boat.model) return;
+
+        const spec = BOATS[settings.model];
+        const length = spec.length * settings.size;
+        const z = spec.stand * length;
+
+        hull.updateMatrixWorld(true);
+        group.updateMatrixWorld(true);
+
+        const origin = new THREE.Vector3(0, 50, z);
+        const hits = [];
+        raycaster.set(hull.localToWorld(origin.clone()), new THREE.Vector3(0, -1, 0).transformDirection(hull.matrixWorld));
+        raycaster.intersectObject(boat.model, true, hits);
+
+        /* Skip sails, yards and roofs: the deck is the first upward-facing surface low on the hull. */
+        const deck = hits.find((hit) =>
+        {
+            const up = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld).y : 1;
+            return up > 0.6 && hull.worldToLocal(hit.point.clone()).y < length * 0.35;
+        });
+        const top = deck ? hull.worldToLocal(deck.point.clone()).y : 0;
+        figureRoot.position.set(0, top, z);
+        figureRoot.visible = settings.figure;
+    };
+
+    boat.setModel = async (name) =>
+    {
+        const spec = BOATS[name] ?? BOATS.rowboat;
+        settings.model = BOATS[name] ? name : "rowboat";
+
+        const gltf = await load(`${base}boats/${spec.file}`);
+        if(settings.model !== name && BOATS[name]) return; // switched again while loading
+
+        if(boat.model) hull.remove(boat.model);
+
+        const model = gltf.scene;
+        materials.length = 0;
+        model.traverse((child) =>
+        {
+            if(!child.isMesh) return;
+            child.castShadow = false;
+            const material = child.material;
+            if(!material.userData.original) material.userData.original = material.color.clone();
+            materials.push({ material, original: material.userData.original });
+        });
+
+        hull.add(model);
+        boat.model = model;
+        boat.fit();
+        applyBrightness();
+    };
+
+    /* Scale to the model's length and sink it to its waterline. */
+    boat.fit = () =>
+    {
+        if(!boat.model) return;
+
+        const spec = BOATS[settings.model];
+        boat.model.scale.setScalar(1);
+        boat.model.position.set(0, 0, 0);
+
+        /* Measure in the model's own space: attached, the box would include where the sea put the boat. */
+        const parent = boat.model.parent;
+        parent?.remove(boat.model);
+        boat.model.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(boat.model);
+        parent?.add(boat.model);
+        const nativeLength = box.max.z - box.min.z;
+        const scale = (spec.length * settings.size) / nativeLength;
+
+        boat.model.scale.setScalar(scale);
+        boat.model.position.set(-((box.max.x + box.min.x) / 2) * scale, -box.min.y * scale, -((box.max.z + box.min.z) / 2) * scale);
+
+        const hullHeight = Math.min(box.max.y - box.min.y, 2.2) * scale;
+        hull.position.y = -hullHeight * spec.sink * settings.sink;
+
+        placeFigure();
+    };
+
+    boat.applyBrightness = applyBrightness;
+    boat.placeFigure = placeFigure;
+
+    load(`${base}figure.glb`).then((gltf) =>
     {
         const figure = gltf.scene;
-
-        /* Scale to 2.4 units tall with the soles at zero. */
+        figure.updateMatrixWorld(true);
         const box = new THREE.Box3().setFromObject(figure);
-        const height = box.max.y - box.min.y;
-        figure.scale.setScalar(2.4 / height);
-        figure.position.set(0, deck, 1.1);
+        figure.scale.setScalar(2.4 / (box.max.y - box.min.y));
 
         figure.traverse((child) =>
         {
@@ -138,29 +159,33 @@ export function createBoat({ figureUrl })
         });
 
         boat.mixer = new THREE.AnimationMixer(figure);
-        const clip = gltf.animations[0];
-        if(clip) boat.mixer.clipAction(clip).play();
+        if(gltf.animations[0]) boat.mixer.clipAction(gltf.animations[0]).play();
 
-        group.add(figure);
+        figureRoot = new THREE.Group();
+        figureRoot.add(figure);
+        hull.add(figureRoot);
         boat.figure = figure;
+        placeFigure();
     });
 
-    /* Float the boat at (x, z): height and tilt come from the same wave sum the shader draws. */
-    boat.float = (ocean, x, z, yaw, delta) =>
+    /* Float at (x, z): height and tilt come from the same wave sum the shader draws. */
+    boat.float = (ocean, delta, time) =>
     {
-        const height = ocean.level + ocean.heightAt(x, z) + shape.draft * 0.42;
+        const { x, z } = settings;
         const slope = ocean.slopeAt(x, z);
 
-        group.position.set(x, height, z);
-        group.rotation.set(-Math.atan(slope.z) * 0.85, yaw, Math.atan(slope.x) * 0.85);
+        group.position.set(x, ocean.level + ocean.heightAt(x, z), z);
+        group.rotation.set(-Math.atan(slope.z) * settings.tilt, THREE.MathUtils.degToRad(settings.heading), Math.atan(slope.x) * settings.tilt);
 
         if(boat.mixer)
         {
             boat.mixer.update(delta);
-            /* The mixer rewrites the bone every frame, so the tilt is added on top and never accumulates. */
-            if(boat.head) boat.head.rotation.x -= boat.headTilt;
+            /* The mixer rewrites the bone every frame, so the tilt goes on top and never accumulates. */
+            if(boat.head) boat.head.rotation.x -= settings.headTilt + Math.sin(time * 0.4) * 0.04;
         }
     };
+
+    boat.setModel(settings.model);
 
     return boat;
 }
