@@ -16,12 +16,12 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 export function createStatue({ url, ocean, clock })
 {
     const settings = {
-        height: 46,       // height of the whole bust in world units
-        top: 3.5,         // where the crown sits above the calm sea level
-        x: 0,
-        z: 0,
-        turn: 180,        // degrees; 180 faces the default camera
-        lean: -6,         // degrees, forward tilt of the head
+        height: 32.5,     // height of the whole bust in world units
+        top: 9.05,        // where the crown sits above the calm sea level
+        x: 2.3,
+        z: 35.3,
+        turn: -158,       // degrees; around 180 faces the default camera
+        lean: -37,        // degrees, forward tilt of the head
         brightness: 1.6,
         wetReach: 0.6,    // how far above the waterline the stone is wet even at the lowest wave
         dryTime: 6,       // seconds for wet stone to dry by one unit
