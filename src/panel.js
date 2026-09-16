@@ -1,4 +1,4 @@
-/* The panel, the address bar and the presets, from one list.
+﻿/* The panel, the address bar and the presets, from one list.
  *
  * Every tunable number is one row: a path, the object that holds it, a range. The panel is built from the
  * rows, presets are partial maps of paths, and whatever differs from the defaults is written into the
@@ -281,7 +281,8 @@ export function buildPanel(ctx)
         if(intro.target !== lastTarget) { lastTarget = intro.target; saveSoon(); }
     }, 400);
 
-    if(innerWidth < 720) gui.close();
+    /* Closed by default: open, it covers the right-hand title. */
+    gui.close();
 
     return { sync, replay: actions.replay };
 }
