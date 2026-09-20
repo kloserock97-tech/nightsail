@@ -16,10 +16,10 @@ panel, and a night you like can be sent as a link.
 
 ## The idea
 
-There is exactly one light in this scene and it stands at a known point. So almost nothing is lit by a
-lighting system: the sea, the shards and the air each brighten by how much they face the core and how
-close they are to its axis. The head is the one real lit object, and the core lights it from above like
-a spotlight.
+The scene has one light, and it stands at a known point. So almost nothing goes through a lighting
+system. The sea, the shards and the air each brighten by how much they face the core and how close they
+are to its axis. The head is the one real lit object, and the core lights it from above like a
+spotlight.
 
 ## The head and the tide
 
@@ -27,25 +27,24 @@ The bust is scaled up until, at low tide, the sea reaches its brows. The tide is
 the whole sea on top of the swell, so at high tide the head is gone and only the glint on the water
 shows where it was.
 
-The stone knows where the water is. Its shader evaluates the same wave sum the sea draws, at every point
-of the marble, so the waterline is exact. Right at the surface there is a torn band of foam. Above it the
-stone is darker and glossier up to the highest the water has reached lately; that high-water mark is
-kept on the CPU and sinks back slowly, which is what makes the head look like it has only just come out
-of the sea.
+The stone's shader evaluates the same wave sum the sea draws, at every point of the marble, so the
+waterline is exact. Right at the surface there is a torn band of foam. Above it the stone is darker and
+glossier up to the highest the water has reached lately. That high-water mark is kept on the CPU and
+sinks back slowly, so the head looks as if it has only now come out of the sea.
 
 ## The light
 
-- **Column.** A single plane turned to the camera, with a gaussian falloff across it, a pinch at the core
-  and a noise texture along it. A plane has no silhouette, which a cone or a cylinder always does. Where it
-  cuts through the head it fades by comparing its depth with the scene's, so there is no seam.
-- **Core.** 5,400 sparks sampled on an icosphere, each breaking away along its normal and carried by a CPU
-  curl-noise field, so the core boils instead of glowing.
-- **Threads.** 520 short paths traced through the field once at start-up and baked into ribbons; a bright
-  head runs along each. The field does not change, so there is no reason to trace it every frame.
+- **Column.** A single plane turned to the camera, with a gaussian falloff across it, a pinch at the
+  core and a noise texture along it. A plane has no silhouette, which a cone or a cylinder always does.
+  Where it cuts through the head it fades by comparing its depth with the scene's, so there is no seam.
+- **Core.** 5,400 sparks sampled on an icosphere, each breaking away along its normal and carried by a
+  CPU curl-noise field, so the core boils.
+- **Threads.** 520 short paths traced through the field once at start-up and baked into ribbons, with a
+  bright head running along each. The field does not change, so tracing it once is enough.
 - **Dust and shards.** Sparse sparks settling towards the column and 150 dented rocks drifting up, for
   parallax.
-- **Lens.** Bloom, a band blur that softens the top and bottom of the frame, and lens flares drawn from the
-  projected position of the core rather than extracted from bright pixels.
+- **Lens.** Bloom, a band blur that softens the top and bottom of the frame, and lens flares drawn at
+  the projected position of the core, without a bright-pixel pass.
 
 ## The sea
 
