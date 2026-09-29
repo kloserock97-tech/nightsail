@@ -2,6 +2,19 @@ import * as THREE from "three/webgpu";
 import { float, Fn, mix, normalize, normalWorld, positionWorld, smoothstep, uniform, vec3 } from "three/tsl";
 import { CORE } from "./light.js";
 
+// Hash Kit (our own hash, see shelf/items/hash-kit)
+const SALT = 0xb31c96c9;
+
+function hashU(x)
+{
+    x ^= x >>> 16; x = Math.imul(x, 0x3f9c86cb);
+    x ^= x >>> 14; x = Math.imul(x, 0x1ae9dacf);
+    x ^= x >>> 15;
+    return x >>> 0;
+}
+const hashUnit = (h) => (h >>> 8) / 16777216;
+const hash1 = (x) => hashUnit(hashU((Math.floor(x) + SALT) >>> 0));
+
 /* Rock shards hanging in the air. With the camera nearly still, the parallax between near and far shards
  * is what gives the frame its depth.
  *
@@ -46,7 +59,7 @@ export function createDebris({ clock, air })
     /* Dent the icosahedron once for the whole batch: a hundred and fifty identical silhouettes show at once. */
     for(let i = 0; i < vertices.count; i++)
     {
-        const k = 0.62 + Math.abs((Math.sin(i * 12.9898) * 43758.5453) % 1) * 0.7;
+        const k = 0.62 + hash1(i) * 0.7;
         vertices.setXYZ(i, vertices.getX(i) * k, vertices.getY(i) * k * 0.85, vertices.getZ(i) * k);
     }
 
