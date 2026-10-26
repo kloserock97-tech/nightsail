@@ -1,7 +1,7 @@
 import * as THREE from "three/webgpu";
 import { color, mix, uniform, viewportUV } from "three/tsl";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import GUI from "lil-gui";
+import GUI, { stageSize } from "./panel/panel.js";
 import { createClock } from "./clock.js";
 import { createSky } from "./sky.js";
 import { createOcean } from "./ocean.js";
@@ -35,7 +35,7 @@ const renderer = new THREE.WebGPURenderer({
 });
 
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
+renderer.setSize(stageSize().width, stageSize().height);
 
 try
 {
@@ -179,8 +179,9 @@ function toast(text)
     toast.timer = setTimeout(() => toastElement.classList.remove("is-on"), 1400);
 }
 
+const gui = new GUI({ title: "Nightsail", repo: "https://github.com/kloserock97-tech/nightsail", theme: "dark", onReset: () => panel.reset() });
 const panel = buildPanel({
-    gui: new GUI({ title: "Nightsail", width: 300 }),
+    gui,
     clock, lens, view, tuned, air, ocean, light, sparks, flow, debris, statue, post, controls, camera, toast,
 });
 
@@ -207,18 +208,19 @@ const stats = (() =>
 
 addEventListener("resize", () =>
 {
-    camera.aspect = innerWidth / innerHeight;
+    const { width, height } = stageSize();
+    camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
-    post.flare.aspect.value = innerWidth / innerHeight;
+    renderer.setSize(width, height);
+    post.flare.aspect.value = width / height;
 });
-post.flare.aspect.value = innerWidth / innerHeight;
+post.flare.aspect.value = stageSize().width / stageSize().height;
 
 addEventListener("keydown", (event) =>
 {
-    if(event.target.closest?.("input, select, .lil-gui")) return;
+    if(event.target.closest?.("input, select, .pnl-sheet")) return;
 
-    if(event.code === "KeyH") document.documentElement.classList.toggle("is-clean");
+    if(event.code === "KeyH") gui.show(!document.documentElement.classList.toggle("is-clean"));
     else if(event.code === "Space") { clock.paused = !clock.paused; panel.sync(); event.preventDefault(); }
 });
 

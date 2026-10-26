@@ -12,7 +12,8 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-#stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+/* the scene fills the window above the settings sheet (panel/panel.js sets --pnl-sheet) */
+#stage { position: fixed; inset: 0 0 auto; width: 100%; height: calc(100% - var(--pnl-sheet)); display: block; touch-action: none; }
 
 /* A little vignette and grain, so the frame reads as shot rather than assembled. */
 .film { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
@@ -66,13 +67,10 @@ kbd {
 }
 .fallback[hidden] { display: none; }
 
-.lil-gui { --widget-height: 22px; --font-size: 12.5px; }
-
 /* H: a clean frame */
-.is-clean .lil-gui, .is-clean .hud, .is-clean .credit, .is-clean .stats { display: none; }
+.is-clean .pnl-bar, .is-clean .hud, .is-clean .credit, .is-clean .stats { display: none; }
 
 @media (max-width: 720px) {
   .hud p:not(.hint) { display: none; }
   .hud h1 { font-size: 30px; }
-  .lil-gui.root { --width: 260px; }
 }

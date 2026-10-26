@@ -209,7 +209,6 @@ export function buildPanel(ctx)
     gui.add(actions, "copyLink").name("copy link to this night");
     gui.add(actions, "copySettings").name("copy settings as JSON");
     gui.add(actions, "resetView").name("reset camera");
-    gui.add(actions, "reset").name("reset everything");
 
     folders.get("Statue").open();
 
@@ -295,5 +294,5 @@ export function buildPanel(ctx)
 
     if(innerWidth < 720) gui.close();
 
-    return { sync };
+    return { sync, reset: actions.reset };
 }

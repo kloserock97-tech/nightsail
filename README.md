@@ -57,6 +57,10 @@ The sky is an HDR panorama rendered once in Blender Cycles: a light column insid
 
 `H` hides the panel, `Space` freezes time, drag to orbit, scroll to zoom.
 
+The settings sit in a sheet at the bottom of the page, one tab per group. Drag anywhere on a row to change a value,
+double-click it to type one, or use the arrow keys. The buttons in the top right switch between a light and a dark
+panel, fold the sheet and reset everything.
+
 | Folder | What's in it |
 | --- | --- |
 | **Time** | speed of everything |
@@ -107,8 +111,8 @@ head at low tide filling the middle of the frame.
 
 ## Credits
 
-Scene, shaders and panel are my own work. Built with [three.js](https://threejs.org) and
-[lil-gui](https://lil-gui.georgealways.com). The head is "Marble Bust 01" by Rico Cilliers from
+Scene, shaders and the settings panel (`src/panel/`) are my own work. Built with [three.js](https://threejs.org).
+The head is "Marble Bust 01" by Rico Cilliers from
 [Poly Haven](https://polyhaven.com/a/marble_bust_01), released under CC0. The sky was rendered for this
 project. Full list with license texts: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
